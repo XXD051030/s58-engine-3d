@@ -95,7 +95,7 @@ button,select,input{font:inherit;color:inherit}
 .cyl .n{font-family:var(--f-display);font-weight:700;font-size:16px;line-height:1}
 .cyl .s{font-size:11.5px;font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cyl .bar{position:absolute;left:0;bottom:0;height:3px;background:currentColor;width:0}
-.cyl .flash{position:absolute;inset:0;background:color-mix(in srgb,var(--power) 40%,transparent);opacity:0;pointer-events:none}
+.cyl .flash{position:absolute;inset:0;background:color-mix(in srgb,var(--power) 26%,transparent);opacity:0;pointer-events:none}
 .st-intake{color:var(--intake)} .st-comp{color:var(--comp)} .st-power{color:var(--power)} .st-exhaust{color:var(--exhaust)}
 
 .loading{position:absolute;inset:0;display:grid;place-items:center;font-size:13px;color:var(--muted);z-index:5;background:var(--stage)}
@@ -302,7 +302,7 @@ select{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
           <label class="tg"><input type="checkbox" id="t-exhaust" checked>排气与涡轮</label>
           <label class="tg"><input type="checkbox" id="t-chain" checked>正时链条</label>
           <label class="tg"><input type="checkbox" id="t-flow" checked>气流粒子</label>
-          <label class="tg"><input type="checkbox" id="t-fire" checked>燃烧与爆炸特效</label>
+          <label class="tg"><input type="checkbox" id="t-fire" checked>燃烧与火花</label>
           <label class="tg"><input type="checkbox" id="t-labels">部件标注</label>
           <label class="tg"><input type="checkbox" id="t-cut">剖切视图</label>
           <label class="tg"><input type="checkbox" id="t-rotate">自动环绕</label>
@@ -1147,25 +1147,17 @@ label('下排气管（至 GPF）', G.exhaust, 34, -2.6, TZ + 3.2);
 /* ================= 燃烧室气体、火花、喷雾、缸内光源 ================= */
 const GAS_GEO = new THREE.CylinderGeometry(BORE / 2 - 0.06, BORE / 2 - 0.06, 1, 40, 1, false).translate(0, 0.5, 0);
 const PLUME_GEO = new THREE.ConeGeometry(0.42, 4.2, 12, 1, true).translate(0, -2.1, 0);
-const SPARK_GEO = new THREE.OctahedronGeometry(1, 0);
-const KERNEL_GEO = new THREE.SphereGeometry(1, 32, 16);
-E.kernels = [];
+const SPARK_GEO = new THREE.OctahedronGeometry(0.6, 0);
 for (let i = 0; i < 6; i++) {
   const x = CYL_X[i];
   const gm = new THREE.MeshBasicMaterial({ color: 0x4ea8ff, transparent: true, opacity: 0.3, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
   const gas = mesh(GAS_GEO, gm, G.fire, x, 10, 0, false);
   gas.renderOrder = 1;
   E.gas.push(gas);
-  // 火花：三根交叉尖刺组成的实心星形，不做发光
-  const sp = new THREE.Group();
-  const spm = new THREE.MeshBasicMaterial({ color: 0xffe600 });
-  for (const s of [[0.22, 1.1, 0.22], [1.1, 0.22, 0.22], [0.22, 0.22, 1.1]]) { const arm = new THREE.Mesh(SPARK_GEO, spm); arm.scale.set(...s); sp.add(arm); }
-  sp.position.set(x, PLUG_TIP_Y - 0.25, PLUG_Z); sp.visible = false;
+  // 火花：实心小标记，不做发光
+  const sp = new THREE.Mesh(SPARK_GEO, new THREE.MeshBasicMaterial({ color: 0xffe14a }));
+  sp.position.set(x, PLUG_TIP_Y - 0.2, PLUG_Z); sp.visible = false;
   G.fire.add(sp); E.sparks.push(sp);
-  // 爆燃火团：从火花塞处迅速扩散，约 25° 曲轴转角充满燃烧室
-  const kernel = new THREE.Mesh(KERNEL_GEO, new THREE.MeshBasicMaterial({ color: 0xffe000, transparent: true, opacity: 0, depthWrite: false }));
-  kernel.renderOrder = 3; kernel.visible = false;
-  G.fire.add(kernel); E.kernels.push(kernel);
   // 多孔喷油器的 6 束油雾
   const sprayG = new THREE.Group();
   const info = E.sprays[i];
@@ -1179,66 +1171,6 @@ for (let i = 0; i < 6; i++) {
   sprayG.visible = false; G.fire.add(sprayG);
   info.group = sprayG; info.mat = pm;
 }
-/* ================= 爆炸特效（慢放时显示）：火球、四散火星、冲击波环 ================= */
-const FIREBALL_GEO = new THREE.SphereGeometry(1, 48, 24);
-const SHOCK_GEO = new THREE.RingGeometry(0.8, 1.0, 96).rotateX(-Math.PI / 2);
-const FIREBALL_VS = `
-  varying vec3 vN; varying vec3 vV; varying vec3 vP;
-  void main() {
-    vP = position;
-    vN = normalize(normalMatrix * normal);
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    vV = normalize(-mv.xyz);
-    gl_Position = projectionMatrix * mv;
-  }`;
-// 火球着色：中心亮黄、边缘橙红并逐渐透明，用噪声做出翻滚的火焰纹理；uHeat 越低越偏暗红
-const FIREBALL_FS = `
-  uniform float uTime, uHeat, uAlpha, uSeed;
-  varying vec3 vN; varying vec3 vV; varying vec3 vP;
-  float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
-  float noise(vec3 x) {
-    vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(mix(hash(i), hash(i + vec3(1, 0, 0)), f.x), mix(hash(i + vec3(0, 1, 0)), hash(i + vec3(1, 1, 0)), f.x), f.y),
-               mix(mix(hash(i + vec3(0, 0, 1)), hash(i + vec3(1, 0, 1)), f.x), mix(hash(i + vec3(0, 1, 1)), hash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
-  }
-  void main() {
-    float facing = abs(dot(normalize(vN), normalize(vV)));
-    float n = 0.6 * noise(vP * 2.5 + vec3(uSeed, -uTime * 4.0, 0.0)) + 0.4 * noise(vP * 6.0 + vec3(0.0, uSeed, uTime * 2.0));
-    float t = clamp(facing * 0.8 + n * 0.45 - (1.0 - uHeat) * 0.55, 0.0, 1.0);
-    vec3 c = mix(vec3(0.72, 0.1, 0.02), vec3(1.0, 0.5, 0.04), smoothstep(0.12, 0.5, t));
-    c = mix(c, vec3(1.0, 0.93, 0.55), smoothstep(0.55, 0.92, t));
-    float a = uAlpha * smoothstep(0.02, 0.4, facing) * (0.55 + 0.45 * n);
-    gl_FragColor = vec4(c, a);
-  }`;
-function fireballMat(seed) {
-  return new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uHeat: { value: 1 }, uAlpha: { value: 0 }, uSeed: { value: seed } },
-    vertexShader: FIREBALL_VS, fragmentShader: FIREBALL_FS, transparent: true, depthWrite: false,
-  });
-}
-const SPARKS_N = 90;
-let boomSeed = 7;
-const boomRnd = () => { boomSeed = (Math.imul(boomSeed, 1664525) + 1013904223) >>> 0; return boomSeed / 4294967296; };
-E.booms = CYL_X.map((x, i) => {
-  const outer = new THREE.Mesh(FIREBALL_GEO, fireballMat(i * 7.3)); outer.renderOrder = 6;
-  const inner = new THREE.Mesh(FIREBALL_GEO, fireballMat(i * 7.3 + 3.1)); inner.renderOrder = 7;
-  const ring = new THREE.Mesh(SHOCK_GEO, new THREE.MeshBasicMaterial({ color: 0xffe27a, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
-  ring.renderOrder = 6; ring.position.set(x, DECK + 0.25, 0);
-  // 火星：方向以水平为主，飞行距离和出发时刻各不相同
-  const dirs = new Float32Array(SPARKS_N * 3), dist = new Float32Array(SPARKS_N), lag = new Float32Array(SPARKS_N);
-  for (let p = 0; p < SPARKS_N; p++) {
-    const a = boomRnd() * Math.PI * 2, y = (boomRnd() - 0.55) * 0.9, l = Math.hypot(1, y);
-    dirs.set([Math.cos(a) / l, y / l, Math.sin(a) / l], p * 3);
-    dist[p] = 5 + 7 * boomRnd(); lag[p] = boomRnd() * 25;
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(SPARKS_N * 3), 3));
-  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(SPARKS_N * 3), 3));
-  const pts = new THREE.Points(g, new THREE.PointsMaterial({ size: 1, map: DOT_TEX, vertexColors: true, transparent: true, depthWrite: false }));
-  pts.frustumCulled = false; pts.renderOrder = 8;
-  for (const o of [outer, inner, ring, pts]) { o.visible = false; G.fire.add(o); }
-  return { outer, inner, ring, pts, dirs, dist, lag };
-});
 label('燃烧室', G.fire, CYL_X[5], DECK - 1.0, -BORE / 2);
 
 /* ================= 气流粒子 ================= */
@@ -1403,21 +1335,17 @@ function pose(thetaDeg) {
 /* ================= 燃烧 / 气流 / 涡轮动画 ================= */
 const TMPC = new THREE.Color();
 // 缸内气体用平涂颜色，与冲程图例一致
-const GASC = { in: new THREE.Color(0x4ea8ff), comp: new THREE.Color(0xa68cff), core: new THREE.Color(0xffe000), flame: new THREE.Color(0xffb41f), power: new THREE.Color(0xff6f22), burnt: new THREE.Color(0xc9472a), ex: new THREE.Color(0xa59585) };
+const GASC = { in: new THREE.Color(0x4ea8ff), comp: new THREE.Color(0xa68cff), flame: new THREE.Color(0xffd23f), power: new THREE.Color(0xff7a2e), ex: new THREE.Color(0xa59585) };
 function updateFX(dt) {
   const L = SIM.load, vis = SIM.playing ? SIM.timeScale : 0;
-  // 爆炸特效只在慢放或暂停时显示：动画里每秒点火超过约 10 次就开始淡出，实时速度下完全关闭
-  const boomK = 1 - smooth(10, 40, SIM.playing ? SIM.rpm * SIM.timeScale / 20 : 0);
   for (let i = 0; i < 6; i++) {
     const psi = PSI[i], m = E.gas[i].material;
     const li = LIFT.in[i] / SIDES.in.lift, le = LIFT.ex[i] / SIDES.ex.lift;
     const since = wrap720(psi + SIM.ign);
     if (since < 220) {
-      // 点火后约 25° 内火焰充满燃烧室，接着是做功的浓橙色，膨胀后期转为暗红
-      const c1 = smooth(4, 24, since);
-      if (since < 24) TMPC.copy(GASC.comp).lerp(GASC.flame, c1);
-      else TMPC.copy(GASC.flame).lerp(GASC.power, smooth(24, 90, since)).lerp(GASC.burnt, smooth(100, 215, since));
-      m.opacity = 0.45 + 0.45 * c1 - 0.35 * smooth(60, 215, since);
+      const flame = since < 30 ? smooth(0, 30, since) : Math.exp(-(since - 30) / 70);
+      TMPC.copy(GASC.flame).lerp(GASC.power, smooth(10, 90, since));
+      m.opacity = 0.3 + 0.4 * flame;
     } else if (psi >= 180 && psi < 360) {
       TMPC.copy(GASC.ex); m.opacity = 0.2 + 0.3 * le;
     } else if (psi >= 360 && psi < 540) {
@@ -1427,48 +1355,8 @@ function updateFX(dt) {
     }
     m.color.copy(TMPC);
     const sp = E.sparks[i];
-    sp.visible = since < 26;
-    if (sp.visible) sp.scale.setScalar(1.35 - 0.55 * since / 26);
-    // 爆燃火团：从火花塞处的小火球扩散成充满燃烧室的扁平火团，随后淡出
-    const kr = E.kernels[i];
-    kr.visible = since < 62;
-    if (kr.visible) {
-      const g = smooth(0, 26, since), top = SEAT_Y + 0.35, crown = E.pistons[i].position.y + CH;
-      const R = 0.45 + (BORE / 2 - 0.6) * g, hh = Math.max(0.25, (top - crown) / 2);
-      kr.position.set(CYL_X[i], lerp(PLUG_TIP_Y - 0.3, (top + crown) / 2, g), lerp(PLUG_Z, 0, g));
-      kr.scale.set(R, Math.min(R, hh), R);
-      kr.material.color.copy(GASC.core).lerp(GASC.flame, smooth(8, 50, since));
-      kr.material.opacity = 0.95 * (1 - smooth(32, 62, since));
-    }
-    // 爆炸特效：火球迅速膨胀后冷却消散，火星四散下坠，冲击波环从缸口向外扩散
-    const bm = E.booms[i], bOn = boomK > 0.01 && since < 120;
-    bm.outer.visible = bm.inner.visible = bOn && since < 100;
-    bm.ring.visible = bOn && since < 50;
-    bm.pts.visible = bOn;
-    if (bOn) {
-      const cy = (SEAT_Y + 0.35 + E.pistons[i].position.y + CH) / 2 + 0.5;
-      const burst = 1 - Math.pow(1 - Math.min(1, since / 22), 3);
-      const R = 6.2 * (0.12 + 0.88 * burst) * (1 + 0.15 * smooth(22, 100, since));
-      const heat = 1 - smooth(8, 85, since);
-      const uo = bm.outer.material.uniforms, ui = bm.inner.material.uniforms;
-      bm.outer.position.set(CYL_X[i], cy, 0); bm.outer.scale.set(R, R * 0.8, R);
-      uo.uAlpha.value = 0.85 * (1 - smooth(35, 100, since)) * boomK; uo.uHeat.value = 0.75 * heat; uo.uTime.value = since / 60;
-      bm.inner.position.set(CYL_X[i], cy, 0); bm.inner.scale.set(R * 0.55, R * 0.45, R * 0.55);
-      ui.uAlpha.value = 0.95 * (1 - smooth(25, 75, since)) * boomK; ui.uHeat.value = 0.35 + 0.65 * heat; ui.uTime.value = since / 50;
-      const rr = (BORE / 2) * (1 + 2.0 * (1 - Math.pow(1 - Math.min(1, since / 45), 2)));
-      bm.ring.scale.set(rr, 1, rr);
-      bm.ring.material.opacity = 0.95 * (1 - smooth(10, 55, since)) * boomK;
-      const pos = bm.pts.geometry.attributes.position, col = bm.pts.geometry.attributes.color;
-      for (let p = 0; p < bm.dist.length; p++) {
-        const s = Math.max(0, since - bm.lag[p] * 0.3), d = bm.dist[p] * (1 - Math.exp(-s / 18));
-        pos.setXYZ(p, CYL_X[i] + bm.dirs[p * 3] * d, cy + bm.dirs[p * 3 + 1] * d - 0.0004 * s * s, bm.dirs[p * 3 + 2] * d);
-        TMPC.copy(GASC.core).lerp(GASC.power, smooth(0, 55, s + bm.lag[p])).lerp(GASC.burnt, smooth(55, 115, s));
-        col.setXYZ(p, TMPC.r, TMPC.g, TMPC.b);
-      }
-      pos.needsUpdate = col.needsUpdate = true;
-      bm.pts.material.opacity = (1 - smooth(55, 120, since)) * boomK;
-      bm.pts.material.size = 1.6 - 1.0 * smooth(0, 120, since);
-    }
+    sp.visible = since < 18;
+    if (sp.visible) sp.scale.setScalar(1.3 - 0.5 * since / 18);
     const inj = E.sprays[i], t = (psi - 372) / 80;
     inj.group.visible = t > 0 && t < 1;
     if (inj.group.visible) { inj.group.scale.set(1, 0.15 + 0.85 * smooth(0, 0.4, t), 1); inj.mat.opacity = 0.6 * (1 - smooth(0.6, 1, t)); }
