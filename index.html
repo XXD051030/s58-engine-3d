@@ -247,7 +247,7 @@ select{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
             <option value="0.003">放慢 300 倍</option>
             <option value="0.001">放慢 1000 倍</option>
           </select>
-          <p class="hint">7200 rpm 时曲轴每秒转 120 圈，肉眼无法分辨。数据与声音按真实转速计算，只有画面放慢。</p>
+          <p class="hint">7200 rpm 时曲轴每秒转 120 圈，肉眼无法分辨。数据按真实转速计算。声音跟着画面走：慢放时每缸做功都会响一下，能听出 1-5-3-6-2-4 的顺序；选「实时 1:1」才是连续的发动机声。</p>
         </div>
         <div class="btnrow">
           <button class="btn primary" id="btnPlay">暂停</button>
@@ -1470,37 +1470,162 @@ function goView(name, instant = false) {
 document.querySelectorAll('.views .chip').forEach(b => b.addEventListener('click', () => goView(b.dataset.view)));
 controls.addEventListener('start', () => { tween = null; });
 
-/* ================= 声音（WebAudio 合成） ================= */
+/* ================= 声音：跟着动画逐缸点火 ================= */
+// <audio-synth>
+// 每缸到达做功上止点时（画面上该缸闪光的同一时刻）播放一次点火声。
+// 时间轴跟随动画：慢放时能一下一下听清点火顺序，实时 1:1 时连成真实的发动机声。
+// 点火声经过固定频率的排气共鸣和消声器，转速变化时音色随之变化。
+const POP_BANDS = [800, 1400, 2500, 4200, 7000];
+function makePops(ctx) {
+  const sr = ctx.sampleRate, len = Math.round(0.09 * sr), fade = Math.round(0.015 * sr);
+  let seed = 58;
+  const rnd = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+  return POP_BANDS.map((R) => {
+    const s = 2000 / R;                                    // 转速越高，排气冲击越短促
+    const tr = 0.00007 * s * sr, t2 = 0.0012 * s * sr, tn = 0.0008 * s * sr;
+    const list = [];
+    for (let v = 0; v < 6; v++) {
+      const b = ctx.createBuffer(1, len, sr), d = b.getChannelData(0);
+      const A = 0.85 + 0.3 * rnd(), td = 0.00055 * s * sr * (0.9 + 0.2 * rnd());
+      for (let i = 0; i < len; i++) {
+        const bump = Math.exp(-i / td) - Math.exp(-i / tr);                 // 燃气冲击，前沿很陡
+        const refl = (i / t2) * Math.exp(1 - i / t2);                       // 管内反射回来的负压
+        const hiss = (rnd() * 2 - 1) * Math.exp(-i / tn);                   // 高速气流的湍流声
+        const thud = Math.sin(2 * Math.PI * 72 * i / sr) * Math.exp(-i / (0.022 * sr)) * (1 - Math.exp(-i / (0.002 * sr)));  // 机体闷响
+        d[i] = A * (bump - 0.16 * refl + 0.25 * hiss + 0.3 * thud);
+      }
+      for (let i = 0; i < fade; i++) d[len - 1 - i] *= i / fade;
+      list.push(b);
+    }
+    return list;
+  });
+}
+function noiseBuffer(ctx, sec) {
+  const b = ctx.createBuffer(1, Math.round(ctx.sampleRate * sec), ctx.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  return b;
+}
+function buildEngineAudio(ctx, dest) {
+  const mix = ctx.createGain(), hp = ctx.createBiquadFilter(), res = ctx.createGain();
+  hp.type = 'highpass'; hp.frequency.value = 30;
+  mix.connect(hp); hp.connect(res);
+  // 排气管共鸣：两段梳状共鸣器，相当于两段长度不同的管子
+  for (const [hz, fb, damp, level] of [[96, 0.45, 1400, 0.55], [230, 0.3, 2600, 0.3]]) {
+    const dl = ctx.createDelay(0.05), lp = ctx.createBiquadFilter(), fbG = ctx.createGain(), out = ctx.createGain();
+    dl.delayTime.value = 1 / hz; lp.type = 'lowpass'; lp.frequency.value = damp; fbG.gain.value = fb; out.gain.value = level;
+    hp.connect(dl); dl.connect(lp); lp.connect(fbG); fbG.connect(dl); lp.connect(out); out.connect(res);
+  }
+  const muffler = ctx.createBiquadFilter(); muffler.type = 'lowpass'; muffler.Q.value = 0.7;
+  const boom = ctx.createBiquadFilter(); boom.type = 'peaking'; boom.frequency.value = 105; boom.Q.value = 0.9; boom.gain.value = 4;
+  const body = ctx.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = 420; body.Q.value = 1.3; body.gain.value = 3;
+  const presence = ctx.createBiquadFilter(); presence.type = 'peaking'; presence.frequency.value = 1100; presence.Q.value = 1.0; presence.gain.value = 2.5;
+  const drive = ctx.createGain();
+  const shaper = ctx.createWaveShaper(); shaper.oversample = '2x';
+  const curve = new Float32Array(2048);
+  for (let i = 0; i < curve.length; i++) { const x = i / (curve.length - 1) * 2 - 1; curve[i] = Math.tanh(2.2 * x) / Math.tanh(2.2); }
+  shaper.curve = curve;
+  const exhaust = ctx.createGain();
+  res.connect(muffler); muffler.connect(boom); boom.connect(body); body.connect(presence); presence.connect(drive);
+  drive.connect(shaper); shaper.connect(exhaust); exhaust.connect(dest);
+  // 每缸一路：音量略有差别，声像按该缸在画面上的左右位置
+  const cyl = [1.0, 0.96, 1.04, 0.92, 0.97, 0.9].map((gv) => {
+    const g = ctx.createGain(); g.gain.value = gv;
+    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    if (pan) { g.connect(pan); pan.connect(mix); } else g.connect(mix);
+    return { g, pan };
+  });
+  // 增压后的进气气流声和涡轮啸叫：只在实时速度下出现，而且压得很轻
+  const ns = ctx.createBufferSource(); ns.buffer = noiseBuffer(ctx, 2); ns.loop = true;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.8;
+  const hiss = ctx.createGain(); hiss.gain.value = 0;
+  ns.connect(bp); bp.connect(hiss); hiss.connect(dest);
+  const whine = ctx.createOscillator(); whine.type = 'sine';
+  const whineG = ctx.createGain(); whineG.gain.value = 0;
+  whine.connect(whineG); whineG.connect(dest);
+  ns.start(); whine.start();
+  return { pops: makePops(ctx), cyl, muffler, drive, exhaust, bp, hiss, whine, whineG };
+}
+// 在 when（音频时钟）播放第 k 缸的一次点火声
+function playPop(ctx, n, k, when, rpm) {
+  let bi = 0;
+  for (let i = 1; i < POP_BANDS.length; i++) if (Math.abs(Math.log(rpm / POP_BANDS[i])) < Math.abs(Math.log(rpm / POP_BANDS[bi]))) bi = i;
+  const list = n.pops[bi], src = ctx.createBufferSource();
+  src.buffer = list[(Math.random() * list.length) | 0];
+  src.connect(n.cyl[k].g);
+  src.start(Math.max(when, ctx.currentTime));
+}
+// realtime：动画接近实时速度时为 1；sparse：点火间隔大到能逐个分辨时为 1
+function setEngineAudio(n, t, rpm, load, boost, turbo, realtime, sparse) {
+  const r = rpm / 7200, b = Math.min(1, Math.max(0, (boost + 0.2) / 1.9));
+  n.muffler.frequency.setTargetAtTime(620 + 500 * r + 2400 * Math.pow(load, 1.2) * (0.35 + 0.65 * r), t, 0.06);
+  const drv = 0.7 + 2.2 * load * (0.4 + 0.6 * r);
+  n.drive.gain.setTargetAtTime(drv, t, 0.06);
+  n.exhaust.gain.setTargetAtTime((0.16 + 0.34 * load) * (0.75 + 0.25 * r) / Math.min(drv, 1.6) * (1 + 1.2 * sparse), t, 0.06);
+  n.bp.frequency.setTargetAtTime(1800 + 2500 * r, t, 0.1);
+  n.hiss.gain.setTargetAtTime(0.03 * b * (0.3 + 0.7 * r) * realtime, t, 0.1);
+  n.whine.frequency.setTargetAtTime(900 + turbo * 0.02, t, 0.1);
+  n.whineG.gain.setTargetAtTime(0.006 * b * load * realtime, t, 0.12);
+}
+// </audio-synth>
+
 let AU = null;
+const SCHED = { ok: false, theta: 0, time: 0, last: new Float64Array(6) };
+const PAN_V = new THREE.Vector3();
 function initAudio() {
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const master = ctx.createGain(); master.gain.value = 0;
-  const comp = ctx.createDynamicsCompressor(); master.connect(comp); comp.connect(ctx.destination);
-  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.4; lp.connect(master);
-  const n = 40, re = new Float32Array(n), im = new Float32Array(n);
-  for (let k = 1; k < n; k++) im[k] = Math.pow(k, -0.78) * (k % 2 ? 1 : 0.7);
-  const osc = (type, gain, dest) => { const o = ctx.createOscillator(); if (type === 'wave') o.setPeriodicWave(ctx.createPeriodicWave(re, im)); else o.type = type; const g = ctx.createGain(); g.gain.value = gain; o.connect(g); g.connect(dest); o.start(); return { o, g }; };
-  const o1 = osc('wave', 0.55, lp), o2 = osc('sawtooth', 0.16, lp), o3 = osc('triangle', 0.22, lp), ow = osc('sine', 0, master);
-  const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = buf.getChannelData(0);
-  for (let k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1;
-  const ns = ctx.createBufferSource(); ns.buffer = buf; ns.loop = true;
-  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9;
-  const gn = ctx.createGain(); gn.gain.value = 0.04;
-  ns.connect(bp); bp.connect(gn); gn.connect(master); ns.start();
-  AU = { ctx, master, lp, o1, o2, o3, ow, bp, gn, on: false };
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -12; comp.knee.value = 6; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.2;
+  master.connect(comp); comp.connect(ctx.destination);
+  AU = { ctx, master, nodes: buildEngineAudio(ctx, master), on: false };
+}
+// 在 (a, b] 曲轴转角范围内找出各缸的做功上止点，按 timeOf 换算成音频时间播放
+function emitFiring(a, b, timeOf, guard) {
+  const jit = 0.02 * 120 / Math.max(1, SIM.rpm * 6 * SIM.timeScale);   // 约 ±1% 的点火间隔抖动
+  for (let k = 0; k < 6; k++) {
+    for (let th = FIRE[k] + 720 * (Math.floor((a - FIRE[k]) / 720) + 1); th <= b; th += 720) {
+      if (guard && th <= SCHED.last[k]) continue;
+      SCHED.last[k] = th;
+      playPop(AU.ctx, AU.nodes, k, timeOf(th) + (Math.random() - 0.5) * jit, SIM.rpm);
+    }
+  }
+}
+// 按动画里的曲轴转角提前 0.1 s 排程点火声；音频时钟自己走，并慢慢校正到画面上
+function scheduleFiring() {
+  const ctx = AU.ctx, now = ctx.currentTime;
+  const lat = (ctx.outputLatency || 0) + (ctx.baseLatency || 0);
+  const tVis = now + Math.max(0.005, 0.016 - lat);              // 当前这一帧画面应当被听到的音频时刻
+  const omega = SIM.playing ? SIM.rpm * 6 * SIM.timeScale : 0;  // 动画中曲轴的角速度（°/s）
+  if (!SCHED.ok) { SCHED.ok = true; SCHED.theta = SIM.theta; SCHED.time = tVis; SCHED.last.fill(-1e9); return; }
+  if (omega <= 0) {                                             // 暂停：单步越过上止点时响一下
+    if (SIM.theta > SCHED.theta && SIM.theta - SCHED.theta < 360) emitFiring(SCHED.theta, SIM.theta, () => now + 0.01, false);
+    else if (SIM.theta < SCHED.theta) SCHED.last.fill(-1e9);
+    SCHED.theta = SIM.theta; SCHED.time = tVis;
+    return;
+  }
+  if (SCHED.time < tVis) { SCHED.theta = SIM.theta; SCHED.time = tVis; }
+  let err = SIM.theta + omega * (SCHED.time - tVis) - SCHED.theta;
+  if (Math.abs(err) > 90) { SCHED.theta += err; err = 0; }     // 切换慢放倍数等跳变：直接对齐，不补发
+  const tEnd = now + 0.1, w = Math.max(omega * 0.3, omega + 4 * err);
+  const th0 = SCHED.theta, t0 = SCHED.time, th1 = th0 + w * (tEnd - t0);
+  emitFiring(th0, th1, (th) => t0 + (th - th0) / w, true);
+  SCHED.theta = th1; SCHED.time = tEnd;
 }
 function updateAudio() {
   if (!AU) return;
-  const t = AU.ctx.currentTime, f = SIM.rpm / 20;    // 直六：每转 3 次点火
-  AU.o1.o.frequency.setTargetAtTime(f, t, 0.03);
-  AU.o2.o.frequency.setTargetAtTime(f / 2, t, 0.03);
-  AU.o3.o.frequency.setTargetAtTime(f * 2, t, 0.03);
-  AU.lp.frequency.setTargetAtTime(220 + 1900 * SIM.load + SIM.rpm * 0.35, t, 0.05);
-  AU.bp.frequency.setTargetAtTime(380 + SIM.rpm * 0.5, t, 0.05);
-  AU.gn.gain.setTargetAtTime(0.02 + 0.09 * SIM.load * SIM.rpm / 7200, t, 0.05);
-  AU.ow.o.frequency.setTargetAtTime(1200 + SIM.turbo * 0.018, t, 0.1);
-  AU.ow.g.gain.setTargetAtTime(0.012 * clamp(SIM.boost / 1.7, 0, 1), t, 0.1);
-  AU.master.gain.setTargetAtTime(AU.on ? 0.2 + 0.25 * SIM.load : 0, t, 0.08);
+  const t = AU.ctx.currentTime;
+  const rate = SIM.playing ? SIM.rpm * SIM.timeScale / 20 : 0;   // 动画时间里每秒的点火次数
+  const sparse = 1 - smooth(12, 60, rate), realtime = SIM.playing ? clamp((SIM.timeScale - 0.1) / 0.9, 0, 1) : 0;
+  setEngineAudio(AU.nodes, t, SIM.rpm, SIM.load, SIM.boost, SIM.turbo, realtime, sparse);
+  AU.master.gain.setTargetAtTime(AU.on ? 0.9 : 0, t, 0.08);
+  if (!AU.on) { SCHED.ok = false; return; }
+  for (let k = 0; k < 6; k++) {
+    const p = AU.nodes.cyl[k].pan;
+    if (!p) continue;
+    PAN_V.set(CYL_X[k], DECK, 0).project(camera);
+    p.pan.setTargetAtTime(clamp(PAN_V.x * 0.85, -0.9, 0.9), t, 0.05);
+  }
+  scheduleFiring();
 }
 $('btnSound').addEventListener('click', () => {
   try {
