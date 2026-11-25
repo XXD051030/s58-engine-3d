@@ -1,0 +1,1696 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>S58 直列六缸透视</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 全高"台架"——左侧 3D 舞台 + 右侧仪器控制架；窄屏时上下堆叠 */
+:root{
+  --bg:#0b0e11; --stage:#0f1317; --panel:#141a1f; --panel-2:#1b2229; --line:#28313a;
+  --fg:#e6eaee; --muted:#8d98a4; --accent:#f2bf22; --accent-text:#f2bf22; --accent-ink:#1a1400;
+  --intake:#4ea8ff; --comp:#a68cff; --power:#ff7a2e; --exhaust:#a59585; --danger:#ff5148; --ok:#3fd29b;
+  --scene:#0e1216; --grid:#1d242b; --shadow:rgba(0,0,0,.45); --edge:#9aa6b2;
+  --f-display:"Saira Condensed","Arial Narrow","PingFang SC",sans-serif;
+  --f-body:"Noto Sans SC","PingFang SC","Hiragino Sans GB","Microsoft YaHei",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --r:10px;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#e8ecf0; --stage:#dde3e8; --panel:#ffffff; --panel-2:#f2f4f7; --line:#d2d9e0;
+    --fg:#141a1f; --muted:#56626e; --accent:#e3a900; --accent-text:#8a6300; --accent-ink:#1c1500;
+    --intake:#1c7cd4; --comp:#7357df; --power:#dd560c; --exhaust:#7b6d61; --danger:#d22b2b; --ok:#11946a;
+    --scene:#dce2e8; --grid:#c5ced7; --shadow:rgba(30,40,50,.18); --edge:#45515d;
+    color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#e8ecf0; --stage:#dde3e8; --panel:#ffffff; --panel-2:#f2f4f7; --line:#d2d9e0;
+  --fg:#141a1f; --muted:#56626e; --accent:#e3a900; --accent-text:#8a6300; --accent-ink:#1c1500;
+  --intake:#1c7cd4; --comp:#7357df; --power:#dd560c; --exhaust:#7b6d61; --danger:#d22b2b; --ok:#11946a;
+  --scene:#dce2e8; --grid:#c5ced7; --shadow:rgba(30,40,50,.18); --edge:#45515d;
+  color-scheme:light;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.55;overflow:hidden}
+*{box-sizing:border-box}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{height:100%;display:flex;flex-direction:column}
+.topbar{display:flex;align-items:center;gap:14px 20px;flex-wrap:wrap;padding-block:10px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{display:flex;align-items:baseline;gap:12px;min-width:0}
+.brand .code{font-family:var(--f-display);font-weight:700;font-size:30px;letter-spacing:.02em;line-height:1;color:var(--accent-text)}
+.brand h1{margin:0;font-size:17px;font-weight:700;text-wrap:balance}
+.brand p{margin:0;color:var(--muted);font-size:12.5px}
+.views{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.credit{display:flex;align-items:center;gap:6px;order:3;margin-left:auto}
+.handle{font-family:var(--f-display);font-weight:700;font-size:17px;line-height:1.3;letter-spacing:.02em;color:var(--accent-text);text-decoration:none;padding:1px 11px;border:1px solid var(--line);border-radius:999px;background:var(--panel-2)}
+.handle:hover{border-color:var(--accent)}
+.ghbtn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--fg);text-decoration:none;padding:4px 11px;border:1px solid var(--line);border-radius:999px;background:var(--panel-2);white-space:nowrap}
+.ghbtn:hover{border-color:var(--muted)}
+.ghbtn svg{width:15px;height:15px;flex:none}
+.chip{border:1px solid var(--line);background:var(--panel-2);border-radius:999px;padding:4px 11px;font-size:12.5px;cursor:pointer;white-space:nowrap}
+.chip:hover{border-color:var(--muted)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+
+.layout{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 372px}
+.stage{position:relative;min-width:0;min-height:0;background:var(--stage);overflow:hidden}
+.stage canvas.gl{display:block;width:100%;height:100%;touch-action:none}
+.labels{position:absolute;inset:0;pointer-events:none}
+.lbl{font-size:11.5px;font-weight:500;padding:2px 8px;border-radius:999px;background:color-mix(in srgb,var(--panel) 82%,transparent);
+  border:1px solid var(--line);color:var(--fg);white-space:nowrap;transform:translateY(-14px);box-shadow:0 2px 8px var(--shadow)}
+.lbl::after{content:"";position:absolute;left:50%;bottom:-9px;width:1px;height:8px;background:var(--muted)}
+
+.hud{position:absolute;pointer-events:none;z-index:3}
+.hud-tl{top:12px;left:max(12px,env(safe-area-inset-left,0px));display:flex;gap:10px;align-items:center}
+.hud-tr{top:12px;right:max(12px,env(safe-area-inset-right,0px));text-align:right}
+.hud-bl{bottom:12px;left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px))}
+.glass{background:color-mix(in srgb,var(--panel) 80%,transparent);border:1px solid var(--line);border-radius:var(--r);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);box-shadow:0 6px 20px var(--shadow)}
+.tachbox{padding:6px 10px 4px 6px;display:flex;align-items:center;gap:6px}
+#tach{width:132px;height:112px;display:block}
+.rpmread{display:flex;flex-direction:column;gap:2px}
+.rpmread .big{font-family:var(--f-display);font-weight:700;font-size:40px;line-height:.95;font-variant-numeric:tabular-nums;letter-spacing:.01em}
+.rpmread .unit{font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.rpmread .sub{font-family:var(--f-mono);font-size:11.5px;color:var(--muted)}
+.angle{padding:8px 12px;font-family:var(--f-mono);font-size:12px;line-height:1.5}
+.angle b{font-family:var(--f-display);font-size:22px;font-weight:600;color:var(--fg);font-variant-numeric:tabular-nums}
+.angle .m{color:var(--muted)}
+
+.cylstrip{display:grid;grid-template-columns:auto repeat(6,minmax(0,1fr));gap:6px;padding:8px;pointer-events:auto;align-items:stretch}
+.cylstrip .lead{display:flex;flex-direction:column;justify-content:center;padding:0 6px 0 4px;font-size:11px;color:var(--muted);line-height:1.35}
+.cylstrip .lead b{font-family:var(--f-display);font-size:15px;color:var(--fg);letter-spacing:.06em;font-weight:600}
+.cyl{position:relative;border:1px solid var(--line);border-radius:8px;padding:5px 7px 7px;cursor:pointer;background:var(--panel-2);overflow:hidden;min-width:0;text-align:left}
+.cyl[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.cyl .n{font-family:var(--f-display);font-weight:700;font-size:16px;line-height:1}
+.cyl .s{font-size:11.5px;font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cyl .bar{position:absolute;left:0;bottom:0;height:3px;background:currentColor;width:0}
+.cyl .flash{position:absolute;inset:0;background:color-mix(in srgb,var(--power) 26%,transparent);opacity:0;pointer-events:none}
+.st-intake{color:var(--intake)} .st-comp{color:var(--comp)} .st-power{color:var(--power)} .st-exhaust{color:var(--exhaust)}
+
+.loading{position:absolute;inset:0;display:grid;place-items:center;font-size:13px;color:var(--muted);z-index:5;background:var(--stage)}
+.loading[hidden]{display:none}
+
+.side{min-height:0;overflow-y:auto;border-left:1px solid var(--line);background:var(--bg);
+  padding-block:14px 28px;padding-left:max(14px,env(safe-area-inset-left,0px));padding-right:max(14px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card h2{margin:0;font-size:12px;font-weight:700;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.card h2 span{letter-spacing:0;text-transform:none;font-weight:500;font-size:12px}
+.ctl{display:flex;flex-direction:column;gap:4px}
+.ctl .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.ctl label{font-weight:500}
+.ctl output{font-family:var(--f-mono);font-variant-numeric:tabular-nums;color:var(--accent-text);font-weight:500}
+input[type=range]{width:100%;accent-color:var(--accent);height:22px}
+select{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:5px 8px;width:100%}
+.btnrow{display:flex;gap:6px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--panel-2);border-radius:8px;padding:6px 10px;cursor:pointer;font-size:13px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.hint{font-size:12px;color:var(--muted);margin:0}
+
+.datagrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.dg{background:var(--panel);padding:7px 10px;min-width:0}
+.dg .k{font-size:11.5px;color:var(--muted);display:block}
+.dg .v{font-family:var(--f-display);font-size:21px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.15}
+.dg .v small{font-family:var(--f-body);font-size:11px;color:var(--muted);font-weight:400;margin-left:3px}
+
+.chartbox canvas{width:100%;display:block;border-radius:6px;background:var(--panel-2)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--muted)}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.cylpick{display:flex;gap:4px}
+.cylpick button{width:26px;height:24px;border-radius:6px;border:1px solid var(--line);background:var(--panel-2);cursor:pointer;font-family:var(--f-display);font-weight:600;padding:0}
+.cylpick button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+
+.toggles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px}
+.tg{display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;min-width:0}
+.tg input{accent-color:var(--accent);width:15px;height:15px;margin:0;flex:none}
+
+.explain p{margin:0;font-size:13px;line-height:1.7}
+.explain h3{margin:4px 0 0;font-size:13.5px}
+.explain .swatch{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;vertical-align:baseline}
+.specs table{width:100%;border-collapse:collapse;font-size:12.5px}
+.specs td{padding:5px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.specs td:first-child{color:var(--muted);width:42%;padding-right:8px}
+.specs td:last-child{font-family:var(--f-mono);font-size:12px}
+.foot{font-size:11.5px;color:var(--muted);margin:0;overflow-wrap:anywhere}
+.foot a{color:var(--accent-text);text-underline-offset:2px}
+
+@media (max-width: 900px){
+  body{overflow:auto}
+  .app{height:auto;min-height:100%}
+  .layout{grid-template-columns:minmax(0,1fr)}
+  .stage{height:66vh;min-height:360px}
+  .side{border-left:0;overflow:visible}
+  .views{margin-left:0}
+  .credit{order:0}
+  #tach{width:104px;height:88px}
+  .rpmread .big{font-size:32px}
+  .cylstrip{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .cylstrip .lead{display:none}
+  .cyl .s{font-size:10.5px}
+  .hud-tr{display:none}
+}
+@media (prefers-reduced-motion: reduce){ .cyl .flash{display:none} }
+</style>
+
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="code">S58</span>
+      <div>
+        <h1>直列六缸 3.0 L 双涡轮增压</h1>
+        <p>BMW M4 (G82/G83) · 拖动旋转，滚轮缩放，右键平移</p>
+      </div>
+    </div>
+    <div class="credit">
+      <a class="handle" href="https://github.com/XXD051030" target="_blank" rel="noopener" title="GitHub：XXD051030">@XXD</a>
+      <a class="ghbtn" href="https://github.com/XXD051030/s58-engine-3d" target="_blank" rel="noopener" title="在 GitHub 查看源码：XXD051030/s58-engine-3d"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>GitHub</a>
+    </div>
+    <nav class="views" aria-label="视角">
+      <button class="chip" data-view="iso" aria-pressed="true">总览</button>
+      <button class="chip" data-view="front">正面</button>
+      <button class="chip" data-view="exhaust">排气侧</button>
+      <button class="chip" data-view="intake">进气侧</button>
+      <button class="chip" data-view="top">俯视</button>
+      <button class="chip" data-view="valve">配气机构</button>
+      <button class="chip" data-view="crank">曲柄连杆</button>
+      <button class="chip" data-view="turbo">涡轮</button>
+      <button class="chip" data-view="chain">正时链</button>
+    </nav>
+  </header>
+
+  <main class="layout">
+    <section class="stage" id="stage" aria-label="三维发动机模型">
+      <div class="labels" id="labels"></div>
+      <div class="hud hud-tl">
+        <div class="glass tachbox">
+          <canvas id="tach" width="264" height="224" aria-hidden="true"></canvas>
+          <div class="rpmread">
+            <span class="big" id="rpmBig">2500</span>
+            <span class="unit">rpm 实际转速</span>
+            <span class="sub" id="rpmSub">点火 125 Hz</span>
+          </div>
+        </div>
+      </div>
+      <div class="hud hud-tr">
+        <div class="glass angle">
+          <div class="m">曲轴转角</div>
+          <b id="angleVal">0°</b>
+          <div class="m" id="simScaleVal">动画放慢 50×</div>
+          <div class="m" id="camVal">凸轮轴 0°</div>
+        </div>
+      </div>
+      <div class="hud hud-bl">
+        <div class="glass cylstrip" id="cylStrip">
+          <div class="lead"><span>点火顺序</span><b>1-5-3-6-2-4</b><span>前 → 后</span></div>
+        </div>
+      </div>
+      <div class="loading" id="loading">正在载入三维模型…</div>
+    </section>
+
+    <aside class="side">
+      <section class="card">
+        <h2>运转控制 <span id="stateTxt">运行中</span></h2>
+        <div class="ctl">
+          <div class="row"><label for="rpm">目标转速</label><output id="rpmVal">2,500 rpm</output></div>
+          <input type="range" id="rpm" min="750" max="7200" step="10" value="2500">
+          <div class="btnrow">
+            <button class="btn" data-rpm="750">怠速 750</button>
+            <button class="btn" data-rpm="2750">扭峰 2750</button>
+            <button class="btn" data-rpm="6250">功峰 6250</button>
+            <button class="btn" data-rpm="7200">红线 7200</button>
+          </div>
+        </div>
+        <div class="ctl">
+          <div class="row"><label for="load">油门 / 负荷</label><output id="loadVal">60 %</output></div>
+          <input type="range" id="load" min="0" max="100" step="1" value="60">
+        </div>
+        <div class="ctl">
+          <div class="row"><label for="speed">动画时间缩放</label><output id="speedVal">1/50</output></div>
+          <select id="speed">
+            <option value="1">实时 1:1（会出现频闪）</option>
+            <option value="0.2">放慢 5 倍</option>
+            <option value="0.05">放慢 20 倍</option>
+            <option value="0.02" selected>放慢 50 倍</option>
+            <option value="0.01">放慢 100 倍</option>
+            <option value="0.003">放慢 300 倍</option>
+            <option value="0.001">放慢 1000 倍</option>
+          </select>
+          <p class="hint">7200 rpm 时曲轴每秒转 120 圈，肉眼无法分辨。数据与声音按真实转速计算，只有画面放慢。</p>
+        </div>
+        <div class="btnrow">
+          <button class="btn primary" id="btnPlay">暂停</button>
+          <button class="btn" id="btnBack" title="曲轴后退 10°">◀ 10°</button>
+          <button class="btn" id="btnFwd" title="曲轴前进 10°">10° ▶</button>
+          <button class="btn" id="btnSound">开启声音</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>实时数据 <span>模型估算</span></h2>
+        <div class="datagrid">
+          <div class="dg"><span class="k">扭矩</span><span class="v" id="d-torque">0<small>N·m</small></span></div>
+          <div class="dg"><span class="k">功率</span><span class="v" id="d-power">0<small>kW</small></span></div>
+          <div class="dg"><span class="k">增压（相对）</span><span class="v" id="d-boost">0<small>bar</small></span></div>
+          <div class="dg"><span class="k">涡轮转速</span><span class="v" id="d-turbo">0<small>rpm</small></span></div>
+          <div class="dg"><span class="k">进气 VANOS</span><span class="v" id="d-vin">0<small>°CA</small></span></div>
+          <div class="dg"><span class="k">排气 VANOS</span><span class="v" id="d-vex">0<small>°CA</small></span></div>
+          <div class="dg"><span class="k">点火提前角</span><span class="v" id="d-ign">0<small>° BTDC</small></span></div>
+          <div class="dg"><span class="k">峰值缸压</span><span class="v" id="d-peak">0<small>bar</small></span></div>
+          <div class="dg"><span class="k">活塞平均速度</span><span class="v" id="d-pspeed">0<small>m/s</small></span></div>
+          <div class="dg"><span class="k">废气旁通阀</span><span class="v" id="d-wg">0<small>% 开</small></span></div>
+        </div>
+      </section>
+
+      <section class="card chartbox">
+        <h2>缸压与气门升程 <span class="cylpick" id="cylPick"></span></h2>
+        <canvas id="pvChart" width="680" height="330" aria-label="所选气缸的缸压、气门升程与曲轴转角关系"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--power)"></i>缸压</span>
+          <span><i style="background:var(--intake)"></i>进气门升程</span>
+          <span><i style="background:var(--exhaust)"></i>排气门升程</span>
+          <span><i style="background:var(--muted)"></i>活塞位置</span>
+        </div>
+      </section>
+
+      <section class="card chartbox">
+        <h2>全负荷外特性 <span>M4 Competition</span></h2>
+        <canvas id="curveChart" width="680" height="300" aria-label="扭矩与功率随转速变化曲线"></canvas>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i>扭矩 N·m</span>
+          <span><i style="background:var(--intake)"></i>功率 kW</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>显示图层</h2>
+        <div class="toggles">
+          <label class="tg"><input type="checkbox" id="t-shell" checked>缸体 / 缸盖</label>
+          <label class="tg"><input type="checkbox" id="t-cover" checked>气门室盖 / 线圈</label>
+          <label class="tg"><input type="checkbox" id="t-intake" checked>进气与中冷</label>
+          <label class="tg"><input type="checkbox" id="t-exhaust" checked>排气与涡轮</label>
+          <label class="tg"><input type="checkbox" id="t-chain" checked>正时链条</label>
+          <label class="tg"><input type="checkbox" id="t-flow" checked>气流粒子</label>
+          <label class="tg"><input type="checkbox" id="t-fire" checked>燃烧与火花</label>
+          <label class="tg"><input type="checkbox" id="t-labels">部件标注</label>
+          <label class="tg"><input type="checkbox" id="t-cut">剖切视图</label>
+          <label class="tg"><input type="checkbox" id="t-rotate">自动环绕</label>
+        </div>
+        <div class="ctl">
+          <div class="row"><label for="opacity">外壳不透明度</label><output id="opacityVal">15 %</output></div>
+          <input type="range" id="opacity" min="0" max="100" step="1" value="15">
+        </div>
+      </section>
+
+      <section class="card explain">
+        <h2>工作原理</h2>
+        <h3>四冲程循环（720° 曲轴转角）</h3>
+        <p><span class="swatch" style="background:var(--intake)"></span>进气：活塞下行、进气门开，增压后的空气进入气缸。<span class="swatch" style="background:var(--comp)"></span>压缩：两气门关闭，9.3:1 压缩并在上止点前喷油、点火。<span class="swatch" style="background:var(--power)"></span>做功：燃气推动活塞下行，经连杆把力传给曲轴。<span class="swatch" style="background:var(--exhaust)"></span>排气：排气门开，废气冲向涡轮。</p>
+        <h3>点火顺序与平衡</h3>
+        <p>六个曲拐按 120° 均布，1/6、2/5、3/4 缸成对同相。每转 120° 就有一缸做功，点火顺序 1-5-3-6-2-4。直六的一阶、二阶往复惯性力与力矩天然相互抵消，所以不需要平衡轴。</p>
+        <h3>双涡轮分组</h3>
+        <p>1–3 缸与 4–6 缸各接一台单涡管涡轮。每组三缸的排气脉冲正好间隔 240°，互不干扰，涡轮响应更快。电子废气旁通阀控制最高约 1.7 bar 的增压，压缩空气经水冷中冷器降温后进入进气歧管。</p>
+        <h3>Double-VANOS 与直喷</h3>
+        <p>进、排气凸轮轴的相位都可连续调节，改变气门重叠角，兼顾低速扭矩与高转功率。350 bar 高压直喷把燃油直接喷入燃烧室，喷油器与火花塞居中布置。</p>
+      </section>
+
+      <section class="card specs">
+        <h2>技术参数</h2>
+        <table>
+          <tr><td>发动机代号</td><td>S58B30T0</td></tr>
+          <tr><td>形式</td><td>直列六缸 · DOHC 24 气门</td></tr>
+          <tr><td>排量</td><td>2,993 cm³</td></tr>
+          <tr><td>缸径 × 行程</td><td>84.0 × 90.0 mm</td></tr>
+          <tr><td>压缩比</td><td>9.3 : 1</td></tr>
+          <tr><td>最大功率</td><td>375 kW (510 PS) / 6,250 rpm</td></tr>
+          <tr><td>最大扭矩</td><td>650 N·m / 2,750–5,500 rpm</td></tr>
+          <tr><td>断油转速</td><td>7,200 rpm</td></tr>
+          <tr><td>增压</td><td>2 × 单涡管涡轮，约 1.7 bar</td></tr>
+          <tr><td>燃油系统</td><td>350 bar 缸内直喷</td></tr>
+          <tr><td>配气</td><td>Double-VANOS 可变凸轮相位</td></tr>
+          <tr><td>缸体 / 曲轴</td><td>闭式铝缸体，电弧喷涂缸壁；锻造轻量曲轴</td></tr>
+          <tr><td>缸盖</td><td>3D 打印砂芯铸造，优化冷却水道</td></tr>
+        </table>
+        <p class="foot">功率扭矩为 G82 M4 Competition 官方数据；三维尺寸按公开缸径、行程、缸距按比例建模。缸压、增压、VANOS 等实时数据来自简化物理模型，用于演示趋势。涡轮朝向、管路走向做了简化。</p>
+        <p class="foot">作者 <a href="https://github.com/XXD051030" target="_blank" rel="noopener">@XXD</a> · GitHub ID：XXD051030 · 源码：<a href="https://github.com/XXD051030/s58-engine-3d" target="_blank" rel="noopener">github.com/XXD051030/s58-engine-3d</a></p>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script>window.addEventListener("error",function(e){var l=document.getElementById("loading");if(l){l.hidden=false;l.textContent="三维模型载入失败："+(e.message||"脚本错误")+"。请刷新页面重试。";}});setTimeout(function(){var l=document.getElementById("loading");if(l&&!l.hidden){l.textContent="仍在载入三维库（来自 jsDelivr CDN）。如长时间无响应，请检查网络后刷新。";}},12000);</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+/* ================= 基本参数（1 单位 = 10 mm） ================= */
+const DEG = Math.PI / 180;
+const BORE = 8.4, STROKE = 9.0, CR = STROKE / 2, ROD = 14.4, PITCH = 9.1, CH = 3.1;
+const DECK = CR + ROD + CH + 0.1;              // 缸体顶面高度（曲轴中心为 0）
+const SEAT_Y = DECK + 0.75;                    // 气门座中心高度（篷顶燃烧室）
+const CYL_X = [0, 1, 2, 3, 4, 5].map(i => (i - 2.5) * PITCH);   // 1 缸在前（-X）
+const FIRE = [0, 480, 240, 600, 120, 360];     // 各缸做功上止点对应的曲轴角（720° 循环）
+const FIRING_ORDER = [1, 5, 3, 6, 2, 4];
+const MAIN_R = 2.8, PIN_R = 2.5, PIN_W = 2.2, WEB_T = 1.9;
+const VL = 10.4;                               // 气门全长
+const FINGER_L = 3.6, ROLLER_D = 2.25, ROLLER_R = 0.45, CAM_BASE = 1.55;
+const RATIO = FINGER_L / ROLLER_D;             // 滚子摇臂杠杆比 ≈ 1.6
+const CAM_LY = VL + 0.55 + ROLLER_R + CAM_BASE;  // 凸轮中心在气门坐标系中的高度
+const CAM_LZ = FINGER_L - ROLLER_D;            // 凸轮中心相对气门轴线的外侧偏移
+const SIDES = {
+  in: { s: -1, z: -1.9, tilt: -12 * DEG, headR: 1.55, sp: 1.75, lift: 1.0, dur: 252, peak: 462 },
+  ex: { s: 1, z: 1.85, tilt: 12 * DEG, headR: 1.35, sp: 1.65, lift: 0.95, dur: 248, peak: 250 },
+};
+const REAR_X = 3 * PITCH + 2.3;                // 缸体后端面
+const CHAIN_X = REAR_X + 1.3;                  // 正时链平面（变速箱侧）
+const FRONT_X = -3 * PITCH - 2.3;
+
+/* ================= 渲染器 / 场景 ================= */
+const stage = document.getElementById('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NoToneMapping;   // 清晰模式：不做色调映射，颜色按原样显示
+renderer.localClippingEnabled = true;
+renderer.domElement.className = 'gl';
+stage.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(36, 1, 0.5, 2000);
+camera.position.set(-66, 46, 74);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 16, 2);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 6;
+controls.maxDistance = 280;
+controls.autoRotateSpeed = 0.6;
+
+
+// 清晰模式：无环境反射、无阴影、无辉光。半球光打底，主光跟随相机，从任何角度看都均匀照亮
+scene.add(new THREE.HemisphereLight(0xffffff, 0xaab1b9, 1.7));
+const headLight = new THREE.DirectionalLight(0xffffff, 2.1);
+headLight.position.set(-0.5, 0.65, 0.4);
+headLight.target.position.set(0, 0, -1);
+camera.add(headLight, headLight.target);
+scene.add(camera);
+
+const FLOOR_Y = -14;
+let grid = null;
+
+const EDGE_MAT = new THREE.LineBasicMaterial({ color: 0x9aa6b2, transparent: true, opacity: 0.55, depthWrite: false });
+
+const labelRenderer = new CSS2DRenderer({ element: document.getElementById('labels') });
+
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function applyTheme() {
+  scene.background = new THREE.Color(css('--scene') || '#0e1216');
+  if (grid) { scene.remove(grid); grid.geometry.dispose(); }
+  grid = new THREE.GridHelper(240, 48, new THREE.Color(css('--grid')), new THREE.Color(css('--grid')));
+  grid.position.y = FLOOR_Y + 0.01;
+  grid.material.transparent = true; grid.material.opacity = 0.55;
+  scene.add(grid);
+  EDGE_MAT.color.set(css('--edge') || '#9aa6b2');
+}
+applyTheme();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
+new MutationObserver(applyTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+let lastW = 0, lastH = 0, resizeCount = 0;
+function resize() {
+  const w = Math.max(1, stage.clientWidth), h = Math.max(1, stage.clientHeight);
+  if (w === lastW && h === lastH) return;
+  lastW = w; lastH = h; resizeCount++;
+  renderer.setSize(w, h, false);
+  labelRenderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(stage);
+
+/* ================= 材质 ================= */
+// 清晰模式：全部哑光，不要金属反射和自发光
+const std = (o) => new THREE.MeshStandardMaterial({ ...o, metalness: 0, roughness: Math.max(0.62, o.roughness ?? 0.7), emissive: 0x000000, emissiveIntensity: 0 });
+const CUT_PLANE = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0.0);
+const shellParams = { transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide };
+const M = {
+  piston: std({ color: 0xc8ccd2, metalness: 0.55, roughness: 0.34 }),
+  crown: std({ color: 0x9c9690, metalness: 0.5, roughness: 0.55 }),
+  crank: std({ color: 0xa4abb3, metalness: 0.92, roughness: 0.24 }),
+  rod: std({ color: 0x80878f, metalness: 0.88, roughness: 0.36 }),
+  dark: std({ color: 0x30353b, metalness: 0.6, roughness: 0.5 }),
+  ring: std({ color: 0x3b4046, metalness: 0.95, roughness: 0.28 }),
+  bolt: std({ color: 0x1f2328, metalness: 0.8, roughness: 0.35 }),
+  valveIn: std({ color: 0xc0c6cd, metalness: 0.95, roughness: 0.22 }),
+  valveEx: std({ color: 0x9a8f80, metalness: 0.85, roughness: 0.34 }),
+  spring: std({ color: 0x5f6a74, metalness: 0.8, roughness: 0.32 }),
+  finger: std({ color: 0x8d949c, metalness: 0.9, roughness: 0.3 }),
+  cam: std({ color: 0xb1b7be, metalness: 0.95, roughness: 0.2 }),
+  ceramic: std({ color: 0xf0ede6, metalness: 0.0, roughness: 0.35 }),
+  coil: std({ color: 0x1b1e22, metalness: 0.15, roughness: 0.55 }),
+  rubber: std({ color: 0x101214, metalness: 0.0, roughness: 0.8 }),
+  injector: std({ color: 0x6f7780, metalness: 0.85, roughness: 0.3 }),
+  brass: std({ color: 0xb08d57, metalness: 0.9, roughness: 0.3 }),
+  chain: std({ color: 0x9aa1a9, metalness: 0.95, roughness: 0.3 }),
+  guide: std({ color: 0x3a2f25, metalness: 0.05, roughness: 0.6 }),
+  flywheel: std({ color: 0x72787f, metalness: 0.9, roughness: 0.32 }),
+  pulley: std({ color: 0x40454b, metalness: 0.75, roughness: 0.42 }),
+  intake: std({ color: 0x3b4148, metalness: 0.35, roughness: 0.48, transparent: true, opacity: 0.55, depthWrite: false }),
+  cooler: std({ color: 0xaab2ba, metalness: 0.8, roughness: 0.35 }),
+  manifold: std({ color: 0x9a8d80, metalness: 0.85, roughness: 0.36, emissive: 0xff3300, emissiveIntensity: 0 }),
+  turbine: std({ color: 0x6a655d, metalness: 0.8, roughness: 0.5, emissive: 0xff3300, emissiveIntensity: 0, transparent: true, opacity: 0.72, side: THREE.DoubleSide, depthWrite: false }),
+  compHousing: std({ color: 0xc9ced4, metalness: 0.7, roughness: 0.38, transparent: true, opacity: 0.68, side: THREE.DoubleSide, depthWrite: false }),
+  wheelT: std({ color: 0x8a837a, metalness: 0.9, roughness: 0.3, emissive: 0xff3300, emissiveIntensity: 0 }),
+  wheelC: std({ color: 0xd4d8dc, metalness: 0.95, roughness: 0.18 }),
+  pipe: std({ color: 0x5a6068, metalness: 0.6, roughness: 0.4 }),
+  block: std({ color: 0xaeb4bb, metalness: 0.4, roughness: 0.6, ...shellParams }),
+  head: std({ color: 0xb9bec4, metalness: 0.4, roughness: 0.55, ...shellParams }),
+  cover: std({ color: 0x262a2f, metalness: 0.3, roughness: 0.6, ...shellParams, opacity: 0.35 }),
+  pan: std({ color: 0x8c9298, metalness: 0.5, roughness: 0.55, ...shellParams }),
+  port: std({ color: 0x5b6670, metalness: 0.2, roughness: 0.7, transparent: true, opacity: 0.32, depthWrite: false, side: THREE.DoubleSide }),
+};
+const SHELL_MATS = [M.block, M.head, M.cover, M.pan];
+// 按系统区分颜色：进气门蓝、排气门暖棕、凸轮金色、连杆深灰
+const RECOLOR = {
+  piston: 0xd5d9de, crown: 0xa9a39b, crank: 0xa7b0ba, rod: 0x6b7480, ring: 0x474d55, dark: 0x3d434a,
+  valveIn: 0x5aa0e6, valveEx: 0xcf8a58, spring: 0xa3adb7, finger: 0x737c86, cam: 0xd8b65e,
+  chain: 0xaab2ba, guide: 0xa8733d, flywheel: 0x8e969f, pulley: 0x5c6269, injector: 0x8a939c,
+  manifold: 0xb7794d, turbine: 0x8e8378, wheelT: 0xa39383, wheelC: 0xe1e5e9, pipe: 0x6b727a, intake: 0x5b7c9c,
+};
+for (const [k, c] of Object.entries(RECOLOR)) M[k].color.set(c);
+
+/* ================= 几何工具 ================= */
+function mesh(geo, mat, parent, x = 0, y = 0, z = 0, shadow = true) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
+  m.castShadow = shadow; m.receiveShadow = shadow;
+  parent.add(m);
+  return m;
+}
+// 轴线沿 X 的圆柱
+function cylX(rt, rb, len, seg = 32, open = false) {
+  const g = new THREE.CylinderGeometry(rt, rb, len, seg, 1, open);
+  g.rotateZ(-Math.PI / 2);
+  return g;
+}
+// 在 (u=z, v=y) 平面内的形状沿 X 方向挤出并居中
+function extrudeX(shape, depth, bevel = 0, curveSegments = 24) {
+  const g = new THREE.ExtrudeGeometry(shape, {
+    depth, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments,
+  });
+  g.translate(0, 0, -depth / 2);
+  g.rotateY(-Math.PI / 2);
+  return g;
+}
+// 极坐标形状：方向角 g 对应 (y,z) = r(cos g, sin g)
+function polarShape(rFn, n = 180) {
+  const s = new THREE.Shape();
+  for (let i = 0; i < n; i++) {
+    const g = (i / n) * Math.PI * 2, r = rFn(g);
+    const u = r * Math.sin(g), v = r * Math.cos(g);
+    if (i === 0) s.moveTo(u, v); else s.lineTo(u, v);
+  }
+  s.closePath();
+  return s;
+}
+function circlePath(cu, cv, r, PathCls = THREE.Path) {
+  const p = new PathCls();
+  p.absarc(cu, cv, r, 0, Math.PI * 2, false);
+  return p;
+}
+function ringX(outer, inner, depth, seg = 40) {
+  const s = circlePath(0, 0, outer, THREE.Shape);
+  s.holes.push(circlePath(0, 0, inner));
+  return extrudeX(s, depth, 0, seg);
+}
+function tube(points, r, mat, parent, seg = 64, radialSeg = 18, closed = false) {
+  const curve = new THREE.CatmullRomCurve3(points.map(p => new THREE.Vector3(...p)), closed, 'centripetal');
+  const m = mesh(new THREE.TubeGeometry(curve, seg, r, radialSeg, closed), mat, parent);
+  m.userData.curve = curve;
+  return m;
+}
+const smooth = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const wrap360 = (a) => ((a % 360) + 360) % 360;
+const wrap720 = (a) => ((a % 720) + 720) % 720;
+const wrapPI = (a) => { a = (a + Math.PI) % (2 * Math.PI); if (a < 0) a += 2 * Math.PI; return a - Math.PI; };
+
+// 实心圆点（气流粒子），不用发光渐变
+function dotTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffffff'; g.beginPath(); g.arc(32, 32, 27, 0, Math.PI * 2); g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const DOT_TEX = dotTexture();
+// 外壳轮廓线（按几何体缓存）
+const EDGE_CACHE = new Map();
+function outline(m, angle = 32) {
+  let eg = EDGE_CACHE.get(m.geometry.uuid);
+  if (!eg) { eg = new THREE.EdgesGeometry(m.geometry, angle); EDGE_CACHE.set(m.geometry.uuid, eg); }
+  const l = new THREE.LineSegments(eg, EDGE_MAT);
+  l.renderOrder = 5;
+  m.add(l);
+  return l;
+}
+
+const LABELS = [];
+function label(text, parent, x, y, z) {
+  const d = document.createElement('div');
+  d.className = 'lbl'; d.textContent = text;
+  const o = new CSS2DObject(d);
+  o.position.set(x, y, z);
+  parent.add(o); LABELS.push(o);
+  return o;
+}
+
+/* ================= 场景分组 ================= */
+const engine = new THREE.Group(); scene.add(engine);
+const G = {};
+for (const k of ['core', 'shell', 'cover', 'valvetrain', 'intake', 'exhaust', 'chain', 'flow', 'fire']) {
+  G[k] = new THREE.Group(); G[k].name = k; engine.add(G[k]);
+}
+const E = { pistons: [], rods: [], valves: [], lobes: [], cams: {}, gas: [], sparks: [], sprays: [], lights: [], flows: [], turbos: [] };
+
+/* ================= 曲轴 ================= */
+const PAINT = std({ color: 0xf2bf22, metalness: 0.2, roughness: 0.45, emissive: 0x3d2c00 });
+M.pulley.side = THREE.DoubleSide;
+M.piston.side = THREE.DoubleSide;
+const crank = new THREE.Group(); G.core.add(crank); E.crank = crank;
+const MAIN_LEN = PITCH - PIN_W - 2 * WEB_T;
+for (let k = 0; k < 7; k++) mesh(cylX(MAIN_R, MAIN_R, MAIN_LEN + 0.1, 40), M.crank, crank, (k - 3) * PITCH, 0, 0);
+
+// 曲柄臂 + 平衡块轮廓（相对曲柄销方向的极坐标）
+function webR(d) {
+  const rp = 3.3, s = CR * Math.sin(d);
+  let r = 3.65;
+  if (Math.abs(d) < Math.PI / 2 && Math.abs(s) < rp) r = Math.max(r, CR * Math.cos(d) + Math.sqrt(rp * rp - s * s));
+  const e = Math.abs(wrapPI(d - Math.PI));
+  return Math.max(r, 3.65 + (7.0 - 3.65) * smooth(70 * DEG, 50 * DEG, e));
+}
+const webCache = new Map();
+function webGeo(alpha) {
+  const key = alpha.toFixed(4);
+  if (!webCache.has(key)) webCache.set(key, extrudeX(polarShape(g => webR(wrapPI(g - alpha)), 200), WEB_T - 0.2, 0.1, 8));
+  return webCache.get(key);
+}
+const PIN_ALPHA = FIRE.map(f => -wrap360(f) * DEG);  // 曲柄销初始方向
+for (let i = 0; i < 6; i++) {
+  const a = PIN_ALPHA[i], x = CYL_X[i];
+  mesh(cylX(PIN_R, PIN_R, PIN_W + 0.1, 40), M.crank, crank, x, CR * Math.cos(a), CR * Math.sin(a));
+  for (const sgn of [-1, 1]) mesh(webGeo(a), M.crank, crank, x + sgn * (PIN_W / 2 + WEB_T / 2), 0, 0);
+  // 曲柄销油孔
+  const hole = mesh(new THREE.CircleGeometry(0.28, 16), M.bolt, crank, x, (CR + PIN_R + 0.005) * Math.cos(a), (CR + PIN_R + 0.005) * Math.sin(a), false);
+  hole.rotation.x = a - Math.PI / 2;
+}
+// 前端：曲轴前端 + 扭振减振器（多楔带轮）
+const SNOUT_X = -3 * PITCH - MAIN_LEN / 2 - 2.2;
+mesh(cylX(2.1, 2.1, 4.4, 32), M.crank, crank, SNOUT_X, 0, 0);
+const DAMPER_X = SNOUT_X - 3.0;
+{
+  const pts = [new THREE.Vector2(6.8, -1.6), new THREE.Vector2(8.1, -1.6)];
+  const nG = 8;
+  for (let k = 0; k <= nG * 2; k++) pts.push(new THREE.Vector2(k % 2 ? 7.72 : 8.1, -1.3 + (2.6 * k) / (nG * 2)));
+  pts.push(new THREE.Vector2(8.1, 1.6), new THREE.Vector2(6.8, 1.6), new THREE.Vector2(6.8, -1.6));
+  const lg = new THREE.LatheGeometry(pts, 96); lg.rotateZ(-Math.PI / 2);
+  mesh(lg, M.pulley, crank, DAMPER_X, 0, 0);
+  mesh(ringX(6.8, 6.3, 2.4, 64), M.rubber, crank, DAMPER_X, 0, 0);
+  const hubS = circlePath(0, 0, 6.4, THREE.Shape);
+  hubS.holes.push(circlePath(0, 0, 1.2));
+  for (let k = 0; k < 5; k++) { const g = k / 5 * Math.PI * 2; hubS.holes.push(circlePath(4.2 * Math.sin(g), 4.2 * Math.cos(g), 1.15)); }
+  mesh(extrudeX(hubS, 0.7, 0.05, 32), M.pulley, crank, DAMPER_X + 0.9, 0, 0);
+  mesh(cylX(2.3, 2.3, 2.4, 6), M.bolt, crank, DAMPER_X - 0.2, 0, 0);
+  mesh(new THREE.BoxGeometry(3.3, 0.22, 0.45), PAINT, crank, DAMPER_X, 8.12, 0);
+}
+// 后端：法兰、曲轴链轮、飞轮
+const REAR_SHAFT_X = 3 * PITCH + MAIN_LEN / 2 + 2.5;
+mesh(cylX(2.5, 2.5, 5.0, 32), M.crank, crank, REAR_SHAFT_X, 0, 0);
+function sprocketGeo(R, N, thick, holeR) {
+  const s = polarShape(g => R - 0.2 + 0.44 * Math.pow(0.5 + 0.5 * Math.cos(N * g), 2.2), N * 8);
+  s.holes.push(circlePath(0, 0, holeR ?? R * 0.42));
+  return extrudeX(s, thick, 0.04, 12);
+}
+const CRANK_SPR_R = 2.8, CAM_SPR_R = 5.6;
+mesh(sprocketGeo(CRANK_SPR_R, 22, 0.9, 1.6), M.chain, crank, CHAIN_X, 0, 0);
+const FLY_X = CHAIN_X + 3.4;
+{
+  const fw = circlePath(0, 0, 14.6, THREE.Shape);
+  fw.holes.push(circlePath(0, 0, 2.6));
+  for (let k = 0; k < 6; k++) { const g = (k + 0.5) / 6 * Math.PI * 2; fw.holes.push(circlePath(9.4 * Math.sin(g), 9.4 * Math.cos(g), 1.7)); }
+  mesh(extrudeX(fw, 0.8, 0.06, 64), M.flywheel, crank, FLY_X, 0, 0);
+  const rg = polarShape(g => 14.8 + 0.55 * Math.pow(0.5 + 0.5 * Math.cos(132 * g), 1.4), 132 * 6);
+  rg.holes.push(circlePath(0, 0, 14.1));
+  mesh(extrudeX(rg, 1.4, 0, 8), M.dark, crank, FLY_X + 0.2, 0, 0);
+  mesh(cylX(3.6, 3.6, 1.8, 40), M.flywheel, crank, FLY_X - 0.4, 0, 0);
+  for (let k = 0; k < 8; k++) { const g = k / 8 * Math.PI * 2; mesh(cylX(0.38, 0.38, 2.3, 10), M.bolt, crank, FLY_X - 0.3, 2.85 * Math.cos(g), 2.85 * Math.sin(g)); }
+  mesh(new THREE.BoxGeometry(1.5, 0.25, 0.5), PAINT, crank, FLY_X + 0.2, 15.42, 0);
+}
+
+/* ================= 活塞 ================= */
+const PISTON_R = BORE / 2 - 0.03;
+function pistonGeo() {
+  const R0 = PISTON_R, pts = [];
+  const P = (r, y) => pts.push(new THREE.Vector2(r, y));
+  P(0, CH); P(R0 - 0.12, CH); P(R0, CH - 0.12);
+  for (const [a, b] of [[2.72, 2.57], [2.22, 2.07], [1.78, 1.45]]) { P(R0, a); P(R0 - 0.32, a); P(R0 - 0.32, b); P(R0, b); }
+  P(R0 - 0.01, 0.9); P(R0 - 0.04, -2.3); P(R0 - 0.36, -2.3); P(R0 - 0.36, CH - 0.8); P(0, CH - 0.8);
+  return new THREE.LatheGeometry(pts, 72);
+}
+const PISTON_GEO = pistonGeo();
+const CROWN_GEO = new THREE.CircleGeometry(PISTON_R - 0.12, 64).rotateX(-Math.PI / 2);
+const RELIEF = { in: new THREE.CircleGeometry(SIDES.in.headR + 0.1, 32).rotateX(-Math.PI / 2), ex: new THREE.CircleGeometry(SIDES.ex.headR + 0.1, 32).rotateX(-Math.PI / 2) };
+const RING_GEO = [0.13, 0.13, 0.3].map(h => new THREE.CylinderGeometry(PISTON_R + 0.015, PISTON_R + 0.015, h, 72, 1, true));
+const RING_Y = [2.645, 2.145, 1.615];
+const WRIST_GEO = cylX(1.08, 1.08, 6.4, 24);
+for (let i = 0; i < 6; i++) {
+  const p = new THREE.Group(); p.position.x = CYL_X[i]; G.core.add(p);
+  mesh(PISTON_GEO, M.piston, p);
+  mesh(CROWN_GEO, M.crown, p, 0, CH + 0.004, 0, false);
+  for (const k of ['in', 'ex']) for (const sgn of [-1, 1]) mesh(RELIEF[k], M.dark, p, sgn * SIDES[k].sp, CH + 0.008, SIDES[k].z, false);
+  RING_GEO.forEach((g, j) => mesh(g, M.ring, p, 0, RING_Y[j], 0, false));
+  mesh(WRIST_GEO, M.crank, p);
+  E.pistons.push(p);
+}
+
+/* ================= 连杆（I 形截面） ================= */
+function rodGeos() {
+  const bigR = 3.35, smR = 1.65, w1 = 1.3, w2 = 0.85;
+  const y1 = Math.sqrt(bigR * bigR - w1 * w1), y2 = ROD - Math.sqrt(smR * smR - w2 * w2);
+  const a1 = Math.atan2(y1, w1), a4 = Math.atan2(y1, -w1);
+  const a2 = Math.atan2(y2 - ROD, w2), a3 = Math.atan2(y2 - ROD, -w2);
+  const s = new THREE.Shape();
+  s.moveTo(w1, y1); s.lineTo(w2, y2);
+  s.absarc(0, ROD, smR, a2, a3 + Math.PI * 2, false);
+  s.lineTo(-w1, y1);
+  s.absarc(0, 0, bigR, a4, a1 + Math.PI * 2, false);
+  s.holes.push(circlePath(0, 0, PIN_R + 0.03), circlePath(0, ROD, 1.13));
+  const pocket = (cls) => { const p = new cls(); p.moveTo(0.85, 4.0); p.lineTo(0.5, 12.2); p.lineTo(-0.5, 12.2); p.lineTo(-0.85, 4.0); p.closePath(); return p; };
+  s.holes.push(pocket(THREE.Path));
+  return { frame: extrudeX(s, 2.0, 0.06, 40), web: extrudeX(pocket(THREE.Shape), 0.75, 0, 4) };
+}
+const ROD_G = rodGeos();
+const BOLT_GEO = new THREE.CylinderGeometry(0.42, 0.42, 0.55, 12);
+const SPLIT_GEO = new THREE.BoxGeometry(2.16, 0.05, 0.84);
+for (let i = 0; i < 6; i++) {
+  const r = new THREE.Group(); r.position.x = CYL_X[i]; G.core.add(r);
+  mesh(ROD_G.frame, M.rod, r);
+  mesh(ROD_G.web, M.rod, r);
+  for (const sgn of [-1, 1]) {
+    mesh(BOLT_GEO, M.bolt, r, 0, -2.45, sgn * 2.5);
+    mesh(SPLIT_GEO, M.bolt, r, 0, 0, sgn * 2.94, false);
+  }
+  E.rods.push(r);
+}
+label('锻造曲轴', G.core, -1.5 * PITCH, -7.6, 0);
+label('扭振减振器', G.core, DAMPER_X, 8.6, 0);
+label('飞轮 / 齿圈', G.core, FLY_X, 15.8, 0);
+label('活塞', E.pistons[0], 0, CH + 0.4, 0);
+label('I 形连杆', E.rods[1], 0, 7.5, 0);
+
+/* ================= 缸体（闭式缸体 + 曲轴箱 + 油底壳） ================= */
+const HEAD_TOP = 36.0, BLOCK_W = 7.4, HEAD_W = 9.0;
+// 直角矩形：直角边才能勾出清晰的轮廓线
+function rectShape(x0, x1, z0, z1) {
+  const s = new THREE.Shape();
+  s.moveTo(x0, z0); s.lineTo(x1, z0); s.lineTo(x1, z1); s.lineTo(x0, z1); s.closePath();
+  return s;
+}
+// 平面形状 (u=x, v=z) 沿 -Y 挤出，顶面位于 top
+function extrudeDown(shape, top, depth, curveSegments = 32) {
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false, curveSegments });
+  g.rotateX(Math.PI / 2); g.translate(0, top, 0);
+  return g;
+}
+{
+  const deck = rectShape(FRONT_X, REAR_X, -BLOCK_W, BLOCK_W);
+  CYL_X.forEach(x => deck.holes.push(circlePath(x, 0, BORE / 2 + 0.02)));
+  const b = mesh(extrudeDown(deck, DECK, DECK - 9.0, 48), M.block, G.shell, 0, 0, 0, false);
+  b.renderOrder = 2; outline(b);
+  // 曲轴箱：外形沿 X 挤出
+  const cc = new THREE.Shape();
+  [[-BLOCK_W, 9.0], [-8.8, 4.0], [-8.8, -4.2], [8.8, -4.2], [8.8, 4.0], [BLOCK_W, 9.0]].forEach(([u, v], i) => i ? cc.lineTo(u, v) : cc.moveTo(u, v));
+  cc.closePath();
+  const ccg = extrudeX(cc, REAR_X - FRONT_X, 0, 4);
+  const c = mesh(ccg, M.block, G.shell, 0, 0, 0, false); c.renderOrder = 2; outline(c);
+  // 主轴承隔板（7 道）与主轴承盖螺栓
+  const bh = new THREE.Shape();
+  [[-8.4, -4.2], [8.4, -4.2], [8.4, 4.0], [7.0, 8.9], [-7.0, 8.9], [-8.4, 4.0]].forEach(([u, v], i) => i ? bh.lineTo(u, v) : bh.moveTo(u, v));
+  bh.closePath(); bh.holes.push(circlePath(0, 0, MAIN_R + 0.08));
+  const bhg = extrudeX(bh, 2.4, 0, 40);
+  const BULK_MAT = new THREE.MeshBasicMaterial({ visible: false });
+  for (let k = 0; k < 7; k++) {
+    const x = (k - 3) * PITCH;
+    // 隔板只画轮廓线：多层半透明填充叠在曲轴前面会发白
+    const m = mesh(bhg, BULK_MAT, G.shell, x, 0, 0, false); outline(m);
+    for (const sgn of [-1, 1]) mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.7, 6), M.bolt, G.shell, x, -4.55, sgn * 4.3);
+  }
+  const pan = mesh(new THREE.BoxGeometry(REAR_X - FRONT_X - 0.6, 7.0, 17.0), M.pan, G.shell, 0, -7.6, 0, false);
+  pan.renderOrder = 2; outline(pan);
+  // 缸盖
+  const hs = rectShape(FRONT_X, REAR_X + 1.3, -HEAD_W, HEAD_W);
+  const h = mesh(extrudeDown(hs, HEAD_TOP, HEAD_TOP - DECK - 0.05, 24), M.head, G.shell, 0, 0, 0, false);
+  h.renderOrder = 2; outline(h);
+  // 后端链条罩
+  const cs = new THREE.Shape();
+  [[-12.5, -4.0], [12.5, -4.0], [12.8, 32], [10.5, 42.6], [-10.5, 42.6], [-12.8, 32]].forEach(([u, v], i) => i ? cs.lineTo(u, v) : cs.moveTo(u, v));
+  cs.closePath();
+  const chainCase = mesh(extrudeX(cs, 0.35, 0, 4), M.block, G.shell, CHAIN_X + 1.6, 0, 0, false);
+  chainCase.renderOrder = 2; outline(chainCase);
+  // 气门室盖
+  const cov = mesh(new THREE.BoxGeometry(REAR_X - FRONT_X + 0.6, 4.4, 17.2), M.cover, G.cover, 0.6, HEAD_TOP + 2.2, 0, false);
+  cov.renderOrder = 3; outline(cov);
+}
+label('闭式铝合金缸体', G.shell, FRONT_X + 4, 12, -BLOCK_W);
+label('缸盖（3D 打印砂芯）', G.shell, FRONT_X + 6, 30, -HEAD_W);
+label('油底壳', G.shell, 18, -10.8, 8.5);
+
+/* ================= 配气机构 ================= */
+M.valveIn.side = M.valveEx.side = THREE.DoubleSide;
+function lobeLift(delta, side) {          // delta: 凸轮转角弧度，返回凸轮升程
+  const half = side.dur / 4 * DEG;
+  const u = Math.abs(delta) / half;
+  if (u >= 1) return 0;
+  return side.lift / RATIO * Math.pow(0.5 + 0.5 * Math.cos(Math.PI * u), 0.85);
+}
+function valveGeo(R) {
+  const P = [[0, 0], [R, 0], [R, 0.1], [R * 0.92, 0.2], [R * 0.6, 0.42], [0.42, 0.85], [0.3, 1.3], [0.28, 1.6],
+    [0.28, VL - 0.85], [0.23, VL - 0.8], [0.23, VL - 0.6], [0.28, VL - 0.55], [0.28, VL - 0.05], [0.25, VL], [0, VL]];
+  return new THREE.LatheGeometry(P.map(([r, y]) => new THREE.Vector2(r, y)), 40);
+}
+const SPRING_BOT = 5.2, SPRING_LEN = VL - 1.25 - SPRING_BOT;
+function springGeo() {
+  const pts = [], turns = 6.5, n = 300;
+  for (let k = 0; k <= n; k++) {
+    const t = k / n, a = t * turns * Math.PI * 2, r = 0.7 - 0.17 * smooth(0.55, 1, t);
+    pts.push(new THREE.Vector3(r * Math.cos(a), t * SPRING_LEN, r * Math.sin(a)));
+  }
+  return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), n, 0.1, 8, false);
+}
+function fingerGeo(s) {
+  const P = [[0.5, -0.15], [0.42, 0.32], [0.0, 0.5], [-0.95, 0.62], [-1.35, 0.3], [-3.0, 0.3], [-3.7, 0.12], [-3.92, -0.12],
+    [-3.82, -0.32], [-3.2, -0.3], [-2.4, -0.18], [-1.2, -0.3], [-0.2, -0.42], [0.3, -0.38]];
+  const sh = new THREE.Shape();
+  P.forEach(([u, v], i) => i ? sh.lineTo(u * s, v) : sh.moveTo(u * s, v));
+  sh.closePath();
+  return extrudeX(sh, 0.9, 0.05, 4);
+}
+function sideWorld(side, x, ly, lz) {
+  const a = side.tilt;
+  return new THREE.Vector3(x, SEAT_Y + ly * Math.cos(a) - lz * Math.sin(a), side.z + ly * Math.sin(a) + lz * Math.cos(a));
+}
+const SPRING_GEO = springGeo();
+const RETAINER_GEO = new THREE.CylinderGeometry(0.8, 0.46, 0.32, 24);
+const GUIDE_GEO = new THREE.CylinderGeometry(0.42, 0.42, 1.9, 16);
+const SEAL_GEO = new THREE.CylinderGeometry(0.46, 0.5, 0.45, 16);
+const HLA_GEO = new THREE.CylinderGeometry(0.55, 0.55, 2.4, 20);
+const BALL_GEO = new THREE.SphereGeometry(0.32, 16, 12);
+const ROLLER_GEO = cylX(ROLLER_R, ROLLER_R, 0.62, 24);
+const AXLE_GEO = cylX(0.15, 0.15, 1.0, 10);
+const CAMCAP_MAT = std({ color: 0x8f969d, metalness: 0.55, roughness: 0.5 });
+
+for (const key of ['in', 'ex']) {
+  const side = SIDES[key], s = side.s;
+  const root = new THREE.Group();
+  root.position.set(0, SEAT_Y, side.z);
+  root.rotation.x = side.tilt;
+  G.valvetrain.add(root);
+  const vGeo = valveGeo(side.headR), fGeo = fingerGeo(s), vMat = key === 'in' ? M.valveIn : M.valveEx;
+  // 凸轮轴（随 VANOS 相位转动）
+  const cam = new THREE.Group();
+  cam.position.set(0, CAM_LY, s * CAM_LZ);
+  root.add(cam);
+  const camLen = CHAIN_X - FRONT_X - 0.6;
+  mesh(cylX(1.0, 1.0, camLen, 28), M.cam, cam, FRONT_X + 0.6 + camLen / 2, 0, 0);
+  for (let k = 0; k < 7; k++) mesh(cylX(1.32, 1.32, 1.1, 32), M.cam, cam, (k - 3) * PITCH, 0, 0);
+  const lobeG = extrudeX(polarShape(g => CAM_BASE + lobeLift(wrapPI(g), side), 220), 1.15, 0.05, 8);
+  for (let i = 0; i < 6; i++) {
+    const gNose = Math.PI - (FIRE[i] + side.peak) / 2 * DEG;
+    for (const sg of [-1, 1]) {
+      const lobe = mesh(lobeG, M.cam, cam, CYL_X[i] + sg * side.sp, 0, 0);
+      lobe.rotation.x = gNose;
+    }
+    E.lobes.push({ key, cyl: i, gNose });
+  }
+  // 前端凸轮位置信号轮
+  mesh(sprocketGeo(2.2, 4, 0.35, 0.9), M.dark, cam, FRONT_X + 1.2, 0, 0);
+  // VANOS 调节器：内转子随凸轮轴，外链轮随链条，两个标记的夹角即相位调节量
+  mesh(cylX(3.7, 3.7, 2.4, 40), M.dark, cam, CHAIN_X, 0, 0);
+  mesh(cylX(0.9, 0.9, 0.6, 6), M.bolt, cam, CHAIN_X + 1.45, 0, 0);
+  mesh(new THREE.BoxGeometry(0.3, 2.6, 0.5), PAINT, cam, CHAIN_X + 1.22, 2.0, 0);
+  const spr = new THREE.Group();
+  spr.position.copy(cam.position);
+  root.add(spr);
+  mesh(sprocketGeo(CAM_SPR_R, 44, 0.9, 3.75), M.chain, spr, CHAIN_X, 0, 0);
+  mesh(new THREE.BoxGeometry(0.95, 0.9, 0.35), M.ceramic, spr, CHAIN_X, CAM_SPR_R - 0.75, 0);
+  E.cams[key] = { cam, spr, root, side };
+  // 凸轮轴承盖
+  for (let k = 0; k < 7; k++) {
+    const x = (k - 3) * PITCH;
+    mesh(new THREE.BoxGeometry(1.5, 1.0, 3.8), CAMCAP_MAT, G.shell, 0, 0, 0).position.copy(sideWorld(side, x, CAM_LY + 1.55, s * CAM_LZ));
+  }
+  // 每缸两只气门
+  for (let i = 0; i < 6; i++) for (const sg of [-1, 1]) {
+    const x = CYL_X[i] + sg * side.sp;
+    const valve = mesh(vGeo, vMat, root, x, 0, 0);
+    const ret = mesh(RETAINER_GEO, M.finger, root, x, VL - 1.1, 0);
+    const spring = mesh(SPRING_GEO, M.spring, root, x, SPRING_BOT, 0);
+    mesh(GUIDE_GEO, M.dark, root, x, 4.2, 0);
+    mesh(SEAL_GEO, M.rubber, root, x, SPRING_BOT + 0.1, 0);
+    mesh(HLA_GEO, M.dark, root, x, VL + 0.2 - 1.5, s * FINGER_L);
+    mesh(BALL_GEO, M.finger, root, x, VL + 0.2, s * FINGER_L);
+    const finger = new THREE.Group();
+    finger.position.set(x, VL + 0.2, s * FINGER_L);
+    root.add(finger);
+    mesh(fGeo, M.finger, finger);
+    mesh(ROLLER_GEO, M.cam, finger, 0, 0.35, -s * ROLLER_D);
+    mesh(AXLE_GEO, M.bolt, finger, 0, 0.35, -s * ROLLER_D);
+    E.valves.push({ key, cyl: i, valve, ret, spring, finger, s, lift: 0 });
+  }
+  const lv = E.valves.filter(v => v.key === key)[0];
+  label(key === 'in' ? '进气门' : '排气门', lv.valve, 0, 1.5, 0);
+  label(key === 'in' ? '进气凸轮轴' : '排气凸轮轴', G.valvetrain, 0, 0, 0).position.copy(sideWorld(side, -0.5 * PITCH, CAM_LY + 2.6, s * CAM_LZ));
+  label(key === 'in' ? '进气 VANOS' : '排气 VANOS', G.valvetrain, 0, 0, 0).position.copy(sideWorld(side, CHAIN_X, CAM_LY + 6.2, s * CAM_LZ));
+}
+label('滚子摇臂 + 液压挺柱', G.valvetrain, 0, 0, 0).position.copy(sideWorld(SIDES.ex, CYL_X[1] + 1.65, VL + 1.3, 3.6));
+label('气门弹簧', G.valvetrain, 0, 0, 0).position.copy(sideWorld(SIDES.ex, CYL_X[2] + 1.65, 7.6, 0.8));
+
+/* ================= 火花塞、点火线圈、喷油器、高压油轨 ================= */
+const RAIL_Y = 33.4, RAIL_Z = -2.3, PLUG_Z = 0.2, PLUG_TIP_Y = SEAT_Y + 0.55;
+const INJ_TIP = (x) => new THREE.Vector3(x, SEAT_Y + 0.45, -0.85);
+const INJ_TOP = (x) => new THREE.Vector3(x, RAIL_Y - 0.5, RAIL_Z);
+for (let i = 0; i < 6; i++) {
+  const x = CYL_X[i];
+  // 火花塞
+  mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.35, 8), M.finger, G.valvetrain, x, PLUG_TIP_Y + 0.1, PLUG_Z);
+  mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.4, 20), M.finger, G.valvetrain, x, PLUG_TIP_Y + 0.95, PLUG_Z);
+  mesh(new THREE.CylinderGeometry(0.66, 0.66, 0.7, 6), M.finger, G.valvetrain, x, PLUG_TIP_Y + 2.0, PLUG_Z);
+  mesh(new THREE.CylinderGeometry(0.4, 0.46, 3.0, 20), M.ceramic, G.valvetrain, x, PLUG_TIP_Y + 3.85, PLUG_Z);
+  // 点火线圈（棒式）
+  const coilLen = HEAD_TOP + 4.6 - (PLUG_TIP_Y + 5.2);
+  mesh(new THREE.CylinderGeometry(0.72, 0.72, coilLen, 20), M.coil, G.cover, x, PLUG_TIP_Y + 5.2 + coilLen / 2, PLUG_Z);
+  mesh(new RoundedBoxGeometry(2.4, 1.3, 2.9, 2, 0.3), M.coil, G.cover, x, HEAD_TOP + 5.1, PLUG_Z);
+  mesh(new THREE.BoxGeometry(0.9, 0.7, 1.0), M.dark, G.cover, x + 0.9, HEAD_TOP + 5.2, PLUG_Z - 1.6);
+  // 喷油器（中置，倾斜）
+  const a = INJ_TIP(x), b = INJ_TOP(x), dir = b.clone().sub(a), len = dir.length();
+  const inj = new THREE.Group(); inj.position.copy(a);
+  inj.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+  G.valvetrain.add(inj);
+  mesh(new THREE.CylinderGeometry(0.16, 0.22, 1.2, 12), M.brass, inj, 0, 0.6, 0);
+  mesh(new THREE.CylinderGeometry(0.4, 0.34, len - 2.6, 18), M.injector, inj, 0, 1.2 + (len - 2.6) / 2, 0);
+  mesh(new THREE.CylinderGeometry(0.55, 0.55, 1.2, 18), M.dark, inj, 0, len - 1.0, 0);
+  mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.5, 18), M.injector, inj, 0, len - 0.2, 0);
+  E.sprays.push({ origin: a.clone(), axis: dir.clone().negate() });
+}
+mesh(cylX(0.42, 0.42, 6 * PITCH + 1.0, 18), M.injector, G.valvetrain, 0, RAIL_Y, RAIL_Z);
+mesh(cylX(0.7, 0.7, 2.2, 18), M.injector, G.valvetrain, -3 * PITCH - 0.6, RAIL_Y, RAIL_Z);
+label('火花塞', G.valvetrain, CYL_X[3], PLUG_TIP_Y + 4.0, PLUG_Z + 0.6);
+label('点火线圈', G.cover, CYL_X[4], HEAD_TOP + 6.0, PLUG_Z);
+label('350 bar 直喷喷油器', G.valvetrain, CYL_X[2], 28.5, -1.6);
+label('高压油轨', G.valvetrain, -3 * PITCH, RAIL_Y + 0.8, RAIL_Z);
+
+/* ================= 正时链条（变速箱侧） ================= */
+{
+  const ci = sideWorld(SIDES.in, CHAIN_X, CAM_LY, -CAM_LZ), ce = sideWorld(SIDES.ex, CHAIN_X, CAM_LY, CAM_LZ);
+  const circles = [[0, 0, CRANK_SPR_R], [ci.z, ci.y, CAM_SPR_R], [ce.z, ce.y, CAM_SPR_R]];
+  const pts = [];
+  for (const [u, v, r] of circles) for (let k = 0; k < 240; k++) { const a = k / 240 * Math.PI * 2; pts.push([u + r * Math.cos(a), v + r * Math.sin(a)]); }
+  pts.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower = [], upper = [];
+  for (const p of pts) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop(); lower.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop(); upper.push(p); }
+  const hull = lower.slice(0, -1).concat(upper.slice(0, -1));
+  const n = hull.length, cum = [0];
+  for (let i = 1; i <= n; i++) { const a = hull[i - 1], b = hull[i % n]; cum.push(cum[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1])); }
+  const L = cum[n];
+  const at = (s) => {
+    s = ((s % L) + L) % L;
+    let lo = 0, hi = n - 1;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (cum[mid] <= s) lo = mid; else hi = mid - 1; }
+    const a = hull[lo], b = hull[(lo + 1) % n], t = (s - cum[lo]) / Math.max(1e-6, cum[lo + 1] - cum[lo]);
+    return [lerp(a[0], b[0], t), lerp(a[1], b[1], t)];
+  };
+  const N = 2 * Math.round(L / 1.6), pitch = L / N;
+  const outer = new THREE.InstancedMesh(new THREE.BoxGeometry(1.05, 0.62, pitch * 1.25), M.chain, N / 2);
+  const inner = new THREE.InstancedMesh(new THREE.BoxGeometry(0.78, 0.55, pitch * 1.1), M.dark, N / 2);
+  const pins = new THREE.InstancedMesh(cylX(0.17, 0.17, 1.2, 8), M.bolt, N);
+  for (const m of [outer, inner, pins]) { m.castShadow = true; G.chain.add(m); }
+  // 链条运动方向：曲轴链轮底部向 -Z 运动
+  let bi = 0, best = 1e9;
+  hull.forEach((p, i) => { const d = Math.hypot(p[0], p[1] + CRANK_SPR_R); if (d < best) { best = d; bi = i; } });
+  const dirSign = (hull[(bi + 1) % n][0] - hull[bi][0]) > 0 ? -1 : 1;
+  const dummy = new THREE.Object3D();
+  E.chain = {
+    L, dirSign,
+    update(off) {
+      for (let j = 0; j < N; j++) {
+        const s0 = j * pitch + off, p0 = at(s0), p1 = at(s0 + pitch);
+        const ang = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]);
+        dummy.position.set(CHAIN_X, (p0[1] + p1[1]) / 2, (p0[0] + p1[0]) / 2);
+        dummy.rotation.set(-ang, 0, 0); dummy.updateMatrix();
+        (j % 2 ? inner : outer).setMatrixAt(j >> 1, dummy.matrix);
+        dummy.position.set(CHAIN_X, p0[1], p0[0]); dummy.rotation.set(0, 0, 0); dummy.updateMatrix();
+        pins.setMatrixAt(j, dummy.matrix);
+      }
+      outer.instanceMatrix.needsUpdate = inner.instanceMatrix.needsUpdate = pins.instanceMatrix.needsUpdate = true;
+    },
+  };
+  E.chain.update(0);
+  // 导轨与张紧器
+  const cz = (circles[0][0] + circles[1][0] + circles[2][0]) / 3, cy = (circles[0][1] + circles[1][1] + circles[2][1]) / 3;
+  for (let i = 0; i < n; i++) {
+    const a = hull[i], b = hull[(i + 1) % n], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 15) continue;
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+    let nu = -(b[1] - a[1]) / len, nv = (b[0] - a[0]) / len;
+    const mu = (a[0] + b[0]) / 2, mv = (a[1] + b[1]) / 2;
+    if ((mu - cz) * nu + (mv - cy) * nv < 0) { nu = -nu; nv = -nv; }
+    const rail = mesh(new RoundedBoxGeometry(1.25, 0.6, len * 0.78, 2, 0.2), M.guide, G.chain, CHAIN_X, mv + nv * 0.62, mu + nu * 0.62);
+    rail.rotation.x = -ang;
+    if (mu < 0) {
+      const tp = mesh(cylX(0.7, 0.7, 1.4, 16), M.dark, G.chain, CHAIN_X, mv + nv * 2.0 + 4, mu + nu * 2.0);
+      tp.rotation.x = -ang;
+      label('液压张紧器', G.chain, CHAIN_X, mv + nv * 2.4 + 4, mu + nu * 2.4);
+    } else label('正时链条（变速箱侧）', G.chain, CHAIN_X, mv + nv * 1.2, mu + nu * 1.2);
+  }
+}
+
+/* ================= 进气：气道、歧管、水冷中冷器、节气门 ================= */
+M.runner = std({ color: 0x46505a, metalness: 0.3, roughness: 0.45, transparent: true, opacity: 0.38, depthWrite: false, side: THREE.DoubleSide });
+M.coolant = std({ color: 0x2f6fb5, metalness: 0.4, roughness: 0.4 });
+const PLENUM = { y: 33.6, z: -19.6 };
+const THROTTLE_X = FRONT_X - 1.8;
+E.intakePaths = [];
+for (let i = 0; i < 6; i++) {
+  const x = CYL_X[i];
+  for (const sg of [-1, 1]) {
+    const v = sideWorld(SIDES.in, x + sg * SIDES.in.sp, 1.1, 0);
+    tube([[v.x, v.y, v.z], [x + sg * 0.6, 25.0, -4.0], [x, 26.2, -5.4]], 0.72, M.port, G.intake, 24, 12);
+  }
+  tube([[x, 26.2, -5.4], [x, 27.0, -7.6], [x, 27.3, -HEAD_W - 0.2]], 1.15, M.port, G.intake, 16, 14);
+  tube([[x, 27.3, -HEAD_W - 0.2], [x, 28.9, -12.3], [x, 31.0, -14.7], [x, PLENUM.y - 1.2, PLENUM.z + 3.0]], 1.28, M.runner, G.intake, 32, 16);
+  E.intakePaths.push(new THREE.CatmullRomCurve3([
+    [x, PLENUM.y, PLENUM.z + 1.5], [x, PLENUM.y - 1.2, PLENUM.z + 3.0], [x, 31.0, -14.7], [x, 28.9, -12.3], [x, 27.3, -HEAD_W - 0.2],
+    [x, 27.0, -7.6], [x, 26.2, -5.4], [x, 24.6, -3.0], [x, SEAT_Y + 0.2, -1.6], [x, DECK - 2.0, -1.2],
+  ].map(p => new THREE.Vector3(...p)), false, 'centripetal'));
+}
+{
+  const pl = mesh(new RoundedBoxGeometry(6 * PITCH + 4, 7.4, 6.8, 3, 1.8), M.runner, G.intake, 0, PLENUM.y, PLENUM.z, false);
+  pl.renderOrder = 4;
+  const core = mesh(new THREE.BoxGeometry(6 * PITCH - 1, 5.6, 0.25), M.cooler, G.intake, 0, PLENUM.y, PLENUM.z - 1.6);
+  const finGeo = new THREE.BoxGeometry(0.045, 5.3, 2.6);
+  const NF = 110, fins = new THREE.InstancedMesh(finGeo, M.cooler, NF);
+  const d = new THREE.Object3D();
+  for (let k = 0; k < NF; k++) { d.position.set(-26 + 52 * k / (NF - 1), PLENUM.y, PLENUM.z - 0.2); d.updateMatrix(); fins.setMatrixAt(k, d.matrix); }
+  G.intake.add(fins);
+  for (const dy of [-1.8, 1.8]) {
+    tube([[FRONT_X + 1.2, PLENUM.y + dy, PLENUM.z - 2.6], [FRONT_X - 2.5, PLENUM.y + dy, PLENUM.z - 3.4], [FRONT_X - 6, PLENUM.y + dy - 4, PLENUM.z - 3.0]], 0.42, M.coolant, G.intake, 24, 10);
+  }
+  // 节气门体 + 蝶阀
+  mesh(cylX(2.0, 2.0, 2.4, 32, true), M.pipe, G.intake, THROTTLE_X, PLENUM.y, PLENUM.z).material = M.pipe;
+  mesh(ringX(2.3, 1.9, 0.5, 32), M.dark, G.intake, THROTTLE_X - 1.2, PLENUM.y, PLENUM.z);
+  const tbody = mesh(new THREE.BoxGeometry(1.4, 2.0, 1.6), M.dark, G.intake, THROTTLE_X, PLENUM.y + 0.4, PLENUM.z - 2.6);
+  const flapG = new THREE.Group(); flapG.position.set(THROTTLE_X, PLENUM.y, PLENUM.z); G.intake.add(flapG);
+  const fg = new THREE.CylinderGeometry(1.88, 1.88, 0.07, 40); fg.rotateZ(Math.PI / 2);
+  mesh(fg, M.cam, flapG);
+  mesh(new THREE.CylinderGeometry(0.12, 0.12, 4.2, 8), M.bolt, flapG);
+  flapG.rotation.order = 'XYZ';
+  E.throttle = flapG;
+  label('进气歧管 + 水冷中冷器', G.intake, 6, PLENUM.y + 4.4, PLENUM.z);
+  label('电子节气门', G.intake, THROTTLE_X, PLENUM.y + 2.6, PLENUM.z - 1);
+}
+
+/* ================= 排气歧管、双涡轮、下排气 ================= */
+const TY = 13.5, TZ = 15.0;
+const TURBOS = [
+  { t: new THREE.Vector3(-8.0, TY, TZ), c: new THREE.Vector3(-12.8, TY, TZ), cyl: [0, 1, 2], name: '1–3 缸涡轮（前）' },
+  { t: new THREE.Vector3(12.0, TY, TZ), c: new THREE.Vector3(7.2, TY, TZ), cyl: [3, 4, 5], name: '4–6 缸涡轮（后）' },
+];
+function voluteGeo(Rc, r0, r1, a0, dir, sweep = 1.85 * Math.PI, segs = 72, rad = 20) {
+  const pos = [], idx = [];
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs, a = a0 + dir * t * sweep, rr = lerp(r0, r1, t), R = Rc + rr * 0.6;
+    const cy = R * Math.cos(a), cz = R * Math.sin(a);
+    for (let j = 0; j <= rad; j++) {
+      const b = j / rad * Math.PI * 2, dr = Math.cos(b) * rr, dx = Math.sin(b) * rr * 0.85;
+      pos.push(dx, cy + dr * Math.cos(a), cz + dr * Math.sin(a));
+    }
+  }
+  for (let i = 0; i < segs; i++) for (let j = 0; j < rad; j++) { const a = i * (rad + 1) + j, b = a + rad + 1; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+function wheel(parent, nBlades, rHub0, rHub1, len, bladeH, twist, mat, splitter) {
+  const w = new THREE.Group(); parent.add(w);
+  const hub = new THREE.CylinderGeometry(rHub1, rHub0, len, 24); hub.rotateZ(-Math.PI / 2);
+  mesh(hub, mat, w);
+  const bg = new THREE.BoxGeometry(len * 0.95, bladeH, 0.07);
+  const sg = new THREE.BoxGeometry(len * 0.6, bladeH * 0.85, 0.06);
+  for (let k = 0; k < nBlades * (splitter ? 2 : 1); k++) {
+    const arm = new THREE.Group(); arm.rotation.x = k / (nBlades * (splitter ? 2 : 1)) * Math.PI * 2; w.add(arm);
+    const isS = splitter && k % 2 === 1;
+    const b = mesh(isS ? sg : bg, mat, arm, isS ? len * 0.18 : 0, (rHub0 + rHub1) / 2 + bladeH / 2 - 0.05, 0);
+    b.rotation.y = twist;
+  }
+  return w;
+}
+E.exhaustPaths = [];
+TURBOS.forEach((T, ti) => {
+  const Rt = 2.0 + 1.35 * 0.6, inlet = new THREE.Vector3(T.t.x, TY, TZ - Rt);
+  // 涡轮端
+  const tg = new THREE.Group(); tg.position.copy(T.t); G.exhaust.add(tg);
+  mesh(voluteGeo(2.0, 1.35, 0.5, -Math.PI / 2, -1), M.turbine, tg, 0, 0, 0, false);
+  mesh(cylX(1.65, 1.65, 1.9, 32, true), M.turbine, tg, 0.2, 0, 0, false);
+  mesh(cylX(1.4, 1.5, 1.6, 32, true), M.turbine, tg, 1.6, 0, 0, false);
+  const tw = wheel(tg, 11, 0.45, 0.32, 1.4, 1.05, 0.45, M.wheelT, false);
+  // 压气机端
+  const cg = new THREE.Group(); cg.position.copy(T.c); G.exhaust.add(cg);
+  mesh(voluteGeo(2.3, 0.5, 1.55, Math.PI / 2 + 1.85 * Math.PI, -1), M.compHousing, cg, 0, 0, 0, false);
+  mesh(cylX(1.5, 1.95, 2.1, 32, true), M.compHousing, cg, -1.0, 0, 0, false);
+  mesh(cylX(2.6, 2.6, 0.3, 40), M.compHousing, cg, 0.9, 0, 0, false);
+  const cw = wheel(cg, 6, 1.0, 0.3, 1.7, 1.15, -0.75, M.wheelC, true);
+  // 中间体 + 轴
+  mesh(cylX(1.05, 1.05, (T.t.x - T.c.x) - 2.0, 24), M.pipe, G.exhaust, (T.t.x + T.c.x) / 2, TY, TZ);
+  tube([[(T.t.x + T.c.x) / 2, TY - 1.0, TZ], [(T.t.x + T.c.x) / 2, TY - 3.5, TZ - 2.5], [(T.t.x + T.c.x) / 2, 6, 7.6]], 0.2, M.pipe, G.exhaust, 16, 8);
+  tube([[(T.t.x + T.c.x) / 2 + 0.6, TY + 1.0, TZ], [(T.t.x + T.c.x) / 2 + 0.6, TY + 3.0, TZ - 2.0], [(T.t.x + T.c.x) / 2 + 0.6, 10, 7.6]], 0.22, M.coolant, G.exhaust, 16, 8);
+  // 电子废气旁通阀执行器 + 连杆
+  mesh(new RoundedBoxGeometry(2.6, 2.0, 2.0, 2, 0.35), M.dark, G.exhaust, T.c.x - 0.2, TY - 3.9, TZ + 2.2);
+  const lever = new THREE.Group(); lever.position.set(T.t.x + 1.0, TY - 2.6, TZ + 2.0); G.exhaust.add(lever);
+  mesh(new THREE.BoxGeometry(0.25, 1.6, 0.35), M.bolt, lever, 0, -0.8, 0);
+  const rod = mesh(cylX(0.11, 0.11, (T.t.x - T.c.x) + 0.6, 8), M.bolt, G.exhaust, (T.t.x + T.c.x) / 2 + 0.4, TY - 4.2, TZ + 2.0);
+  // 排气歧管（三缸一组，汇入涡轮切向入口）
+  for (const i of T.cyl) {
+    const x = CYL_X[i];
+    for (const sg of [-1, 1]) {
+      const v = sideWorld(SIDES.ex, x + sg * SIDES.ex.sp, 1.1, 0);
+      tube([[v.x, v.y, v.z], [x + sg * 0.5, 24.8, 3.6], [x, 25.5, 5.3]], 0.62, M.port, G.exhaust, 24, 12);
+    }
+    tube([[x, 25.5, 5.3], [x, 25.3, 7.4], [x, 25.0, HEAD_W + 0.2]], 1.0, M.port, G.exhaust, 16, 14);
+    const pathPts = [[x, 25.0, HEAD_W + 0.2], [x, 23.0, 11.0], [lerp(x, T.t.x, 0.6), 20.4, 12.0], [T.t.x + (x - T.t.x) * 0.08, 18.4, inlet.z]];
+    tube(pathPts, 1.12, M.manifold, G.exhaust, 40, 16);
+    E.exhaustPaths.push(new THREE.CatmullRomCurve3([
+      [x, DECK - 1.6, 1.2], [x, SEAT_Y + 0.4, 1.6], [x, 24.6, 3.4], [x, 25.5, 5.3], [x, 25.3, 7.4], ...pathPts, [T.t.x, 15.6, inlet.z], [T.t.x, TY, inlet.z],
+    ].map(p => new THREE.Vector3(...p)), false, 'centripetal'));
+  }
+  tube([[T.t.x, 19.0, inlet.z], [T.t.x, 16.5, inlet.z], [T.t.x, TY + 0.2, inlet.z]], 1.3, M.manifold, G.exhaust, 12, 16);
+  // 下排气管
+  const dp = ti === 0
+    ? [[T.t.x + 2.3, TY, TZ], [T.t.x + 4.4, TY - 1.0, TZ + 0.2], [T.t.x + 6.0, 6.0, TZ + 0.5], [T.t.x + 10, -1.5, TZ + 1.0], [28, -4.5, TZ + 1.5], [46, -5.0, TZ + 0.5]]
+    : [[T.t.x + 2.3, TY, TZ], [T.t.x + 4.4, TY - 1.0, TZ + 0.3], [T.t.x + 6.0, 5.0, TZ + 0.8], [T.t.x + 10, -1.0, TZ + 3.5], [46, -3.0, TZ + 4.0]];
+  const dpm = tube(dp, 1.35, M.pipe, G.exhaust, 60, 16);
+  // 压气机进气（空滤）与出口
+  const Rce = 2.3 + 1.55 * 0.6;
+  const cin = ti === 0
+    ? [[T.c.x - 2.0, TY, TZ], [T.c.x - 6, TY, TZ + 1.5], [-32, 13.0, 19.0], [-38, 13.0, 19.5]]
+    : [[T.c.x - 2.0, TY, TZ], [T.c.x - 3.8, TY, TZ + 2.0], [0, 12.5, 21.8], [-14, 11.0, 23.6], [-30, 10.5, 24.2], [-38, 10.5, 24.6]];
+  const cinm = tube(cin, 1.25, M.intake, G.intake, 60, 16);
+  const filt = mesh(cylX(2.2, 1.6, 4.6, 28), M.dark, G.intake, cin[cin.length - 1][0] - 2.2, cin[cin.length - 1][1], cin[cin.length - 1][2]);
+  const cout = ti === 0
+    ? [[T.c.x, TY, TZ + Rce], [T.c.x, TY + 4.5, TZ + Rce], [-18, 22, 18.6]]
+    : [[T.c.x, TY, TZ + Rce], [T.c.x, TY + 4.5, TZ + Rce], [0, 21.4, 19.2], [-12, 22, 18.8], [-18, 22, 18.6]];
+  const coutm = tube(cout, 1.15, M.intake, G.intake, 40, 14);
+  E.turbos.push({ tw, cw, lever, rod, rod0: rod.position.x, T, dpCurve: dpm.userData.curve, cinCurve: cinm.userData.curve, coutCurve: coutm.userData.curve, speed: 0 });
+  label(T.name, G.exhaust, T.t.x - 2.4, TY + 5.2, TZ + 3.5);
+});
+const chargePts = [[-18, 22, 18.6], [-30, 27, 17], [-37, 35.5, 8], [-37, 37, -8], [-35, 34.5, -17.2], [THROTTLE_X - 2.2, PLENUM.y, PLENUM.z]];
+const chargeMesh = tube(chargePts, 1.5, M.intake, G.intake, 80, 18);
+E.chargeCurve = chargeMesh.userData.curve;
+label('增压管路', G.intake, -37, 37.8, 0);
+label('空滤进气', G.intake, -40, 15.6, 21.5);
+label('排气歧管', G.exhaust, CYL_X[4], 22.4, 12.6);
+label('电子废气旁通阀', G.exhaust, TURBOS[1].c.x, TY - 5.6, TZ + 2.4);
+label('下排气管（至 GPF）', G.exhaust, 34, -2.6, TZ + 3.2);
+
+/* ================= 燃烧室气体、火花、喷雾、缸内光源 ================= */
+const GAS_GEO = new THREE.CylinderGeometry(BORE / 2 - 0.06, BORE / 2 - 0.06, 1, 40, 1, false).translate(0, 0.5, 0);
+const PLUME_GEO = new THREE.ConeGeometry(0.42, 4.2, 12, 1, true).translate(0, -2.1, 0);
+const SPARK_GEO = new THREE.OctahedronGeometry(0.6, 0);
+for (let i = 0; i < 6; i++) {
+  const x = CYL_X[i];
+  const gm = new THREE.MeshBasicMaterial({ color: 0x4ea8ff, transparent: true, opacity: 0.3, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+  const gas = mesh(GAS_GEO, gm, G.fire, x, 10, 0, false);
+  gas.renderOrder = 1;
+  E.gas.push(gas);
+  // 火花：实心小标记，不做发光
+  const sp = new THREE.Mesh(SPARK_GEO, new THREE.MeshBasicMaterial({ color: 0xffe14a }));
+  sp.position.set(x, PLUG_TIP_Y - 0.2, PLUG_Z); sp.visible = false;
+  G.fire.add(sp); E.sparks.push(sp);
+  // 多孔喷油器的 6 束油雾
+  const sprayG = new THREE.Group();
+  const info = E.sprays[i];
+  sprayG.position.copy(info.origin);
+  sprayG.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), info.axis.clone().normalize());
+  const pm = new THREE.MeshBasicMaterial({ color: 0xffe2a6, transparent: true, opacity: 0.5, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+  for (let k = 0; k < 6; k++) {
+    const arm = new THREE.Group(); arm.rotation.y = k / 6 * Math.PI * 2; sprayG.add(arm);
+    const pl = mesh(PLUME_GEO, pm, arm, 0, 0, 0, false); pl.rotation.x = 0.42;
+  }
+  sprayG.visible = false; G.fire.add(sprayG);
+  info.group = sprayG; info.mat = pm;
+}
+label('燃烧室', G.fire, CYL_X[5], DECK - 1.0, -BORE / 2);
+
+/* ================= 气流粒子 ================= */
+class Flow {
+  constructor(curve, count, color, size, spread) {
+    this.curve = curve; this.n = count; this.spread = spread;
+    this.u = new Float32Array(count); this.off = new Float32Array(count * 3);
+    for (let k = 0; k < count; k++) {
+      this.u[k] = Math.random();
+      const v = new THREE.Vector3().randomDirection().multiplyScalar(Math.random() * spread);
+      this.off.set([v.x, v.y, v.z], k * 3);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+    this.mat = new THREE.PointsMaterial({ color, size, map: DOT_TEX, transparent: true, depthWrite: false, toneMapped: false, opacity: 0.95, sizeAttenuation: true });
+    this.points = new THREE.Points(g, this.mat);
+    this.points.frustumCulled = false;
+    G.flow.add(this.points);
+    this.rate = 0; this.fade = 1;
+    this.tmp = new THREE.Vector3();
+    this.step(0);
+  }
+  step(du) {
+    const pos = this.points.geometry.attributes.position;
+    for (let k = 0; k < this.n; k++) {
+      let u = this.u[k] + du; u -= Math.floor(u); this.u[k] = u;
+      this.curve.getPointAt(u, this.tmp);
+      const taper = Math.min(1, u * 8, (1 - u) * 8);
+      pos.setXYZ(k, this.tmp.x + this.off[k * 3] * taper, this.tmp.y + this.off[k * 3 + 1] * taper, this.tmp.z + this.off[k * 3 + 2] * taper);
+    }
+    pos.needsUpdate = true;
+  }
+}
+const FLOW = { intake: [], exhaust: [], cont: [] };
+E.intakePaths.forEach(c => FLOW.intake.push(new Flow(c, 26, 0x58b6ff, 0.62, 0.55)));
+E.exhaustPaths.forEach(c => FLOW.exhaust.push(new Flow(c, 26, 0xff6a2a, 0.66, 0.5)));
+E.turbos.forEach(t => {
+  FLOW.cont.push({ f: new Flow(t.cinCurve, 40, 0xcfe6ff, 0.6, 0.7), k: 1.0 });
+  FLOW.cont.push({ f: new Flow(t.coutCurve, 26, 0xffb46e, 0.62, 0.6), k: 1.6 });
+  FLOW.cont.push({ f: new Flow(t.dpCurve, 50, 0xa48d7a, 0.75, 0.8), k: 1.2 });
+});
+FLOW.cont.push({ f: new Flow(E.chargeCurve, 60, 0xffb46e, 0.66, 0.85), k: 1.4 });
+
+/* ================= 发动机模型（示意物理） ================= */
+const TQ = [[750, 300], [1000, 340], [1250, 385], [1500, 430], [1750, 475], [2000, 520], [2250, 568], [2500, 612], [2650, 638], [2750, 650],
+  [5500, 650], [5650, 642], [5800, 628], [6000, 602], [6250, 573], [6500, 546], [6800, 515], [7000, 493], [7200, 470]];
+const BOOST_WOT = [[750, 0.12], [1250, 0.5], [1750, 1.05], [2250, 1.5], [2600, 1.7], [5500, 1.7], [6250, 1.56], [7200, 1.36]];
+function interp(pts, x) {
+  if (x <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+    return lerp(y0, y1, (x - x0) / (x1 - x0));
+  }
+  return pts[pts.length - 1][1];
+}
+const SIM = {
+  rpm: 2500, target: 2500, load: 0.6, timeScale: 0.02, playing: true, theta: 0, sel: 0,
+  vanIn: 20, vanEx: 10, boost: 0.6, turbo: 90000, wg: 0.3, ign: 15, torque: 0, power: 0, peak: 0,
+};
+function targets(rpm, L) {
+  const wot = interp(BOOST_WOT, rpm);
+  const rel = -0.7 * Math.pow(1 - L, 1.5) + Math.pow(L, 1.4) * wot;
+  const bump = smooth(1200, 3200, rpm) * (1 - 0.75 * smooth(4800, 7000, rpm));
+  const vanIn = clamp(Math.pow(L, 0.8) * (8 + 32 * bump) + 4 * (1 - L) * smooth(1500, 4000, rpm), 0, 45);
+  const vanEx = clamp(4 + 18 * L * smooth(1000, 3000, rpm) * (1 - 0.5 * smooth(5000, 7200, rpm)) + 10 * (1 - L) * smooth(1200, 3000, rpm), 0, 30);
+  const ign = clamp(6 + 26 * Math.pow(rpm / 7200, 0.7) - 14 * Math.max(rel, 0) / 1.7 + 12 * (1 - L) * smooth(1000, 2500, rpm), 3, 40);
+  const wg = clamp(clamp(1 - L * 1.5, 0, 1) * 0.9 + smooth(2600, 7200, rpm) * L * 0.6, 0, 1);
+  const pr = (1.013 + Math.max(rel, 0) * 1.08) / 1.0;
+  const turbo = 22000 + rpm * 1.5 + 175000 * Math.pow(clamp((pr - 1) / 1.85, 0, 1), 0.62);
+  return { rel, vanIn, vanEx, ign, wg, turbo };
+}
+function stepSim(dt) {
+  const k = 1 - Math.exp(-dt * 2.6);
+  SIM.rpm += (SIM.target - SIM.rpm) * k;
+  if (Math.abs(SIM.target - SIM.rpm) < 0.5) SIM.rpm = SIM.target;
+  const T = targets(SIM.rpm, SIM.load);
+  const tau = T.rel > SIM.boost ? 0.45 : 0.18;                      // 涡轮迟滞
+  SIM.boost += (T.rel - SIM.boost) * (1 - Math.exp(-dt / tau));
+  SIM.turbo += (T.turbo - SIM.turbo) * (1 - Math.exp(-dt / tau));
+  const rate = 160 * dt;                                            // VANOS 调节速度 °CA/s
+  SIM.vanIn += clamp(T.vanIn - SIM.vanIn, -rate, rate);
+  SIM.vanEx += clamp(T.vanEx - SIM.vanEx, -rate, rate);
+  SIM.ign += (T.ign - SIM.ign) * k;
+  SIM.wg += (T.wg - SIM.wg) * k;
+  const wotT = interp(TQ, SIM.rpm);
+  const spool = clamp((SIM.boost + 0.7) / (Math.max(T.rel, -0.69) + 0.7), 0.6, 1.0);
+  SIM.torque = wotT * Math.pow(SIM.load, 1.2) * spool - 28 * (1 - SIM.load);
+  SIM.power = SIM.torque * SIM.rpm * 2 * Math.PI / 60 / 1000;
+}
+
+// 单区燃烧模型：Wiebe 放热 + 多变压缩/膨胀，结果用于缸压曲线与峰值缸压
+const GEO = { r: 0.045, l: 0.144, A: Math.PI / 4 * 0.084 * 0.084 };
+GEO.Vd = GEO.A * 0.09; GEO.Vc = GEO.Vd / (9.3 - 1);
+function vol(psi) {
+  const a = psi * DEG, s = GEO.r * Math.sin(a);
+  return GEO.Vc + GEO.A * (GEO.r + GEO.l - (GEO.r * Math.cos(a) + Math.sqrt(GEO.l * GEO.l - s * s)));
+}
+const PRESS = new Float32Array(720);
+function computePressure() {
+  const map = 1.013 + SIM.boost, pex = 1.05 + 0.85 * Math.max(SIM.boost, 0) + 0.2 * SIM.rpm / 7200;
+  const ivc = Math.round(SIDES.in.peak - SIM.vanIn + SIDES.in.dur / 2);       // 进气门关闭（循环角）
+  const evo = Math.round(SIDES.ex.peak + SIM.vanEx - SIDES.ex.dur / 2 + 720); // 下一循环排气门开启
+  const ve = 0.92 - 0.1 * Math.abs(SIM.rpm - 4500) / 4500;
+  const mAir = map * 1e5 * GEO.Vd * ve / (287 * 318);
+  const afr = SIM.load > 0.85 ? 12.6 : 14.7;
+  const Q = 0.78 * mAir / afr * 43e6 * clamp(0.4 + 0.75 * SIM.load, 0.4, 1);
+  const soc = 720 - SIM.ign + 4, dur = 42 + 14 * SIM.rpm / 7200, gam = 1.32;
+  const wiebe = (x) => x <= soc ? 0 : 1 - Math.exp(-5 * Math.pow((x - soc) / dur, 3));
+  let p = map * 1e5 * 0.98, V = vol(ivc), xbPrev = 0, peak = 0;
+  for (let psi = 360; psi < ivc; psi++) PRESS[psi % 720] = map * 0.97;
+  for (let psi = ivc; psi <= evo; psi += 0.5) {
+    const V2 = vol(psi + 0.5), xb = wiebe(psi + 0.5);
+    const dQ = Q * (xb - xbPrev);
+    p = p + (-gam * p * (V2 - V) + (gam - 1) * dQ) / V2;
+    V = V2; xbPrev = xb;
+    if (Number.isInteger(psi)) { PRESS[wrap720(psi)] = p / 1e5; peak = Math.max(peak, p / 1e5); }
+  }
+  const pEvo = p / 1e5;
+  for (let psi = Math.ceil(evo); psi < 720 + 360; psi++) {
+    const t = (psi - evo) / 45;
+    PRESS[wrap720(psi)] = pex + (pEvo - pex) * Math.exp(-t * t);
+  }
+  SIM.peak = peak;
+}
+computePressure();
+
+/* ================= 每帧姿态：曲柄连杆、凸轮、气门、链条 ================= */
+const GNOSE = { in: [], ex: [] };
+E.lobes.forEach(l => { GNOSE[l.key][l.cyl] = l.gNose; });
+const LIFT = { in: new Float32Array(6), ex: new Float32Array(6) };
+const PSI = new Float32Array(6);
+const camAngle = (key, th) => th / 2 + (key === 'in' ? SIM.vanIn / 2 : -SIM.vanEx / 2) * DEG;
+const valveLiftAt = (key, cyl, rho) => lobeLift(wrapPI(Math.PI - GNOSE[key][cyl] - rho), SIDES[key]) * RATIO;
+function pose(thetaDeg) {
+  const th = thetaDeg * DEG;
+  crank.rotation.x = th;
+  for (let i = 0; i < 6; i++) {
+    const phi = th + PIN_ALPHA[i], yc = CR * Math.cos(phi), zc = CR * Math.sin(phi);
+    const yp = yc + Math.sqrt(ROD * ROD - zc * zc);
+    E.pistons[i].position.y = yp;
+    const r = E.rods[i];
+    r.position.y = yc; r.position.z = zc; r.rotation.x = Math.atan2(-zc, yp - yc);
+    PSI[i] = wrap720(thetaDeg - FIRE[i]);
+    const crown = yp + CH, g = E.gas[i];
+    g.position.y = crown; g.scale.y = Math.max(0.05, SEAT_Y + 0.35 - crown);
+  }
+  for (const key of ['in', 'ex']) {
+    const c = E.cams[key], rho = camAngle(key, th);
+    c.cam.rotation.x = rho; c.spr.rotation.x = th / 2;
+    for (let i = 0; i < 6; i++) LIFT[key][i] = valveLiftAt(key, i, rho);
+  }
+  for (const v of E.valves) {
+    const h = LIFT[v.key][v.cyl];
+    v.valve.position.y = -h;
+    v.ret.position.y = VL - 1.1 - h;
+    v.spring.scale.y = (SPRING_LEN - h) / SPRING_LEN;
+    v.finger.rotation.x = -v.s * Math.asin(h / FINGER_L);
+  }
+  E.chain.update(E.chain.dirSign * th * CRANK_SPR_R);
+}
+
+/* ================= 燃烧 / 气流 / 涡轮动画 ================= */
+const TMPC = new THREE.Color();
+// 缸内气体用平涂颜色，与冲程图例一致
+const GASC = { in: new THREE.Color(0x4ea8ff), comp: new THREE.Color(0xa68cff), flame: new THREE.Color(0xffd23f), power: new THREE.Color(0xff7a2e), ex: new THREE.Color(0xa59585) };
+function updateFX(dt) {
+  const L = SIM.load, vis = SIM.playing ? SIM.timeScale : 0;
+  for (let i = 0; i < 6; i++) {
+    const psi = PSI[i], m = E.gas[i].material;
+    const li = LIFT.in[i] / SIDES.in.lift, le = LIFT.ex[i] / SIDES.ex.lift;
+    const since = wrap720(psi + SIM.ign);
+    if (since < 220) {
+      const flame = since < 30 ? smooth(0, 30, since) : Math.exp(-(since - 30) / 70);
+      TMPC.copy(GASC.flame).lerp(GASC.power, smooth(10, 90, since));
+      m.opacity = 0.3 + 0.4 * flame;
+    } else if (psi >= 180 && psi < 360) {
+      TMPC.copy(GASC.ex); m.opacity = 0.2 + 0.3 * le;
+    } else if (psi >= 360 && psi < 540) {
+      TMPC.copy(GASC.in); m.opacity = 0.2 + 0.3 * li;
+    } else {
+      TMPC.copy(GASC.comp); m.opacity = 0.22 + 0.28 * (psi - 540) / 180;
+    }
+    m.color.copy(TMPC);
+    const sp = E.sparks[i];
+    sp.visible = since < 18;
+    if (sp.visible) sp.scale.setScalar(1.3 - 0.5 * since / 18);
+    const inj = E.sprays[i], t = (psi - 372) / 80;
+    inj.group.visible = t > 0 && t < 1;
+    if (inj.group.visible) { inj.group.scale.set(1, 0.15 + 0.85 * smooth(0, 0.4, t), 1); inj.mat.opacity = 0.6 * (1 - smooth(0.6, 1, t)); }
+  }
+  const cyc = SIM.rpm / 6000;
+  FLOW.intake.forEach((f, i) => f.step(dt * vis * 230 * cyc * (LIFT.in[i] / SIDES.in.lift)));
+  FLOW.exhaust.forEach((f, i) => f.step(dt * vis * 300 * cyc * (LIFT.ex[i] / SIDES.ex.lift)));
+  const mass = (0.25 + 0.75 * SIM.rpm / 7200) * (0.35 + 0.65 * clamp((SIM.boost + 1) / 2.7, 0, 1));
+  FLOW.cont.forEach(c => c.f.step(dt * vis * c.k * 70 * mass));
+  const rps = Math.min(SIM.turbo / 60 * vis, 3.2);
+  E.turbos.forEach(t => {
+    t.tw.rotation.x -= rps * Math.PI * 2 * dt;
+    t.cw.rotation.x -= rps * Math.PI * 2 * dt;
+    t.lever.rotation.z = -SIM.wg * 0.7;
+    t.rod.position.x = t.rod0 + SIM.wg * 0.45;
+  });
+  E.throttle.rotation.y = (6 + 80 * L) * DEG;
+}
+
+/* ================= 界面 ================= */
+const $ = (id) => document.getElementById(id);
+const fmt = (n, d = 0) => Number(n).toLocaleString('zh-CN', { maximumFractionDigits: d, minimumFractionDigits: d });
+let COLORS = {};
+function readColors() {
+  for (const k of ['fg', 'muted', 'line', 'panel', 'panel-2', 'accent', 'accent-text', 'intake', 'comp', 'power', 'exhaust', 'danger']) COLORS[k] = css('--' + k);
+}
+readColors();
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', readColors);
+new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+const STROKES = [['做功', 'st-power'], ['排气', 'st-exhaust'], ['进气', 'st-intake'], ['压缩', 'st-comp']];
+const cylEls = [], pickEls = [], flashV = new Float32Array(6), prevPsi = new Float32Array(6);
+function selectCyl(i) {
+  SIM.sel = i;
+  cylEls.forEach((c, k) => c.el.setAttribute('aria-pressed', String(k === i)));
+  pickEls.forEach((b, k) => b.setAttribute('aria-pressed', String(k === i)));
+}
+for (let i = 0; i < 6; i++) {
+  const el = document.createElement('button');
+  el.className = 'cyl'; el.type = 'button';
+  el.setAttribute('aria-label', `选择第 ${i + 1} 缸`);
+  el.innerHTML = `<span class="n">${i + 1}</span><span class="s">—</span><span class="bar"></span><span class="flash"></span>`;
+  el.addEventListener('click', () => selectCyl(i));
+  $('cylStrip').appendChild(el);
+  cylEls.push({ el, s: el.querySelector('.s'), bar: el.querySelector('.bar'), flash: el.querySelector('.flash'), cls: '' });
+  const b = document.createElement('button');
+  b.type = 'button'; b.textContent = i + 1; b.setAttribute('aria-label', `显示第 ${i + 1} 缸曲线`);
+  b.addEventListener('click', () => selectCyl(i));
+  $('cylPick').appendChild(b); pickEls.push(b);
+}
+selectCyl(0);
+
+const rpmIn = $('rpm'), loadIn = $('load');
+function setTarget(v) { SIM.target = clamp(+v, 750, 7200); rpmIn.value = SIM.target; $('rpmVal').textContent = `${fmt(SIM.target)} rpm`; }
+rpmIn.addEventListener('input', () => setTarget(rpmIn.value));
+document.querySelectorAll('[data-rpm]').forEach(b => b.addEventListener('click', () => setTarget(b.dataset.rpm)));
+loadIn.addEventListener('input', () => { SIM.load = loadIn.value / 100; $('loadVal').textContent = `${loadIn.value} %`; });
+$('speed').addEventListener('change', (e) => {
+  SIM.timeScale = +e.target.value;
+  $('speedVal').textContent = SIM.timeScale === 1 ? '1:1' : `1/${Math.round(1 / SIM.timeScale)}`;
+});
+function setPlaying(p) { SIM.playing = p; $('btnPlay').textContent = p ? '暂停' : '播放'; $('stateTxt').textContent = p ? '运行中' : '已暂停（可单步）'; }
+$('btnPlay').addEventListener('click', () => setPlaying(!SIM.playing));
+$('btnBack').addEventListener('click', () => { setPlaying(false); SIM.theta -= 10; });
+$('btnFwd').addEventListener('click', () => { setPlaying(false); SIM.theta += 10; });
+
+const LAYERS = { 't-shell': G.shell, 't-cover': G.cover, 't-intake': G.intake, 't-exhaust': G.exhaust, 't-chain': G.chain, 't-flow': G.flow, 't-fire': G.fire };
+let labelsOn = false;
+$('labels').hidden = true;
+function setLayer(id, on) {
+  $(id).checked = on;
+  const g = LAYERS[id]; g.visible = on;
+  g.traverse(o => { if (o.isCSS2DObject) o.visible = on; });
+}
+for (const id of Object.keys(LAYERS)) $(id).addEventListener('change', (e) => setLayer(id, e.target.checked));
+$('t-labels').addEventListener('change', (e) => { labelsOn = e.target.checked; $('labels').hidden = !labelsOn; });
+$('t-cut').addEventListener('change', (e) => { for (const m of [...SHELL_MATS, EDGE_MAT]) { m.clippingPlanes = e.target.checked ? [CUT_PLANE] : null; m.needsUpdate = true; } });
+$('t-rotate').addEventListener('change', (e) => { controls.autoRotate = e.target.checked; });
+function setOpacity(v) {
+  for (const m of SHELL_MATS) {
+    const o = m === M.cover ? Math.min(1, v * 1.5) : v, solid = o >= 0.99;
+    m.opacity = o;
+    if (m.transparent === solid) { m.transparent = !solid; m.depthWrite = solid; m.needsUpdate = true; }
+  }
+  $('opacityVal').textContent = `${Math.round(v * 100)} %`;
+}
+$('opacity').addEventListener('input', (e) => setOpacity(e.target.value / 100));
+setOpacity(+$('opacity').value / 100);
+
+const VIEWS = {
+  iso: { p: [-80, 54, 90], t: [0, 15, 2] },
+  front: { p: [-96, 22, 0.01], t: [0, 16, 0] },
+  exhaust: { p: [0, 22, 100], t: [0, 16, 2] },
+  intake: { p: [0, 26, -100], t: [0, 18, -2] },
+  top: { p: [0, 125, 0.01], t: [0, 15, 0] },
+  valve: { p: [-38, 47, 21], t: [CYL_X[0] + 2, 31, 0] },
+  crank: { p: [-44, 4, 38], t: [CYL_X[1], 6, 0] },
+  turbo: { p: [-18, 7, 52], t: [-1, 12, 14] },
+  chain: { p: [62, 50, 44], t: [CHAIN_X, 22, 0] },
+};
+let tween = null;
+function goView(name, instant = false) {
+  const v = VIEWS[name]; if (!v) return;
+  const t1 = new THREE.Vector3(...v.t), fit = Math.max(1, 1.3 / Math.max(0.3, camera.aspect));
+  const p1 = new THREE.Vector3(...v.p).sub(t1).multiplyScalar(fit).add(t1);
+  if (instant) { camera.position.copy(p1); controls.target.copy(t1); controls.update(); tween = null; }
+  else tween = { t: 0, p0: camera.position.clone(), t0: controls.target.clone(), p1, t1 };
+  document.querySelectorAll('.views .chip').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.view === name)));
+  if (name === 'valve') setLayer('t-cover', false);
+}
+document.querySelectorAll('.views .chip').forEach(b => b.addEventListener('click', () => goView(b.dataset.view)));
+controls.addEventListener('start', () => { tween = null; });
+
+/* ================= 声音（WebAudio 合成） ================= */
+let AU = null;
+function initAudio() {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const master = ctx.createGain(); master.gain.value = 0;
+  const comp = ctx.createDynamicsCompressor(); master.connect(comp); comp.connect(ctx.destination);
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 1.4; lp.connect(master);
+  const n = 40, re = new Float32Array(n), im = new Float32Array(n);
+  for (let k = 1; k < n; k++) im[k] = Math.pow(k, -0.78) * (k % 2 ? 1 : 0.7);
+  const osc = (type, gain, dest) => { const o = ctx.createOscillator(); if (type === 'wave') o.setPeriodicWave(ctx.createPeriodicWave(re, im)); else o.type = type; const g = ctx.createGain(); g.gain.value = gain; o.connect(g); g.connect(dest); o.start(); return { o, g }; };
+  const o1 = osc('wave', 0.55, lp), o2 = osc('sawtooth', 0.16, lp), o3 = osc('triangle', 0.22, lp), ow = osc('sine', 0, master);
+  const buf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = buf.getChannelData(0);
+  for (let k = 0; k < d.length; k++) d[k] = Math.random() * 2 - 1;
+  const ns = ctx.createBufferSource(); ns.buffer = buf; ns.loop = true;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.9;
+  const gn = ctx.createGain(); gn.gain.value = 0.04;
+  ns.connect(bp); bp.connect(gn); gn.connect(master); ns.start();
+  AU = { ctx, master, lp, o1, o2, o3, ow, bp, gn, on: false };
+}
+function updateAudio() {
+  if (!AU) return;
+  const t = AU.ctx.currentTime, f = SIM.rpm / 20;    // 直六：每转 3 次点火
+  AU.o1.o.frequency.setTargetAtTime(f, t, 0.03);
+  AU.o2.o.frequency.setTargetAtTime(f / 2, t, 0.03);
+  AU.o3.o.frequency.setTargetAtTime(f * 2, t, 0.03);
+  AU.lp.frequency.setTargetAtTime(220 + 1900 * SIM.load + SIM.rpm * 0.35, t, 0.05);
+  AU.bp.frequency.setTargetAtTime(380 + SIM.rpm * 0.5, t, 0.05);
+  AU.gn.gain.setTargetAtTime(0.02 + 0.09 * SIM.load * SIM.rpm / 7200, t, 0.05);
+  AU.ow.o.frequency.setTargetAtTime(1200 + SIM.turbo * 0.018, t, 0.1);
+  AU.ow.g.gain.setTargetAtTime(0.012 * clamp(SIM.boost / 1.7, 0, 1), t, 0.1);
+  AU.master.gain.setTargetAtTime(AU.on ? 0.2 + 0.25 * SIM.load : 0, t, 0.08);
+}
+$('btnSound').addEventListener('click', () => {
+  try {
+    if (!AU) initAudio();
+    AU.ctx.resume();
+    AU.on = !AU.on;
+    $('btnSound').textContent = AU.on ? '关闭声音' : '开启声音';
+  } catch (err) { $('btnSound').textContent = '声音不可用'; }
+});
+
+/* ================= 图表：转速表、缸压/气门升程、外特性 ================= */
+const FONT_D = '"Saira Condensed","Arial Narrow",sans-serif', FONT_M = '"IBM Plex Mono",ui-monospace,monospace', FONT_B = '"Noto Sans SC","PingFang SC",sans-serif';
+function drawTach() {
+  const c = $('tach'), g = c.getContext('2d'), W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H);
+  const cx = W / 2, cy = H * 0.56, R = W * 0.4, a0 = Math.PI * 0.75, sweep = Math.PI * 1.5;
+  const ang = v => a0 + sweep * clamp(v / 8000, 0, 1);
+  g.lineWidth = 11; g.lineCap = 'butt';
+  g.strokeStyle = COLORS.line; g.beginPath(); g.arc(cx, cy, R, a0, a0 + sweep); g.stroke();
+  g.strokeStyle = COLORS.danger; g.beginPath(); g.arc(cx, cy, R, ang(7200), ang(8000)); g.stroke();
+  g.strokeStyle = COLORS.accent; g.beginPath(); g.arc(cx, cy, R, a0, ang(SIM.rpm)); g.stroke();
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for (let v = 0; v <= 8000; v += 500) {
+    const a = ang(v), major = v % 1000 === 0, r1 = R - 9, r2 = R - (major ? 22 : 15);
+    g.strokeStyle = v >= 7200 ? COLORS.danger : COLORS.muted; g.lineWidth = major ? 3 : 1.6;
+    g.beginPath(); g.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); g.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2); g.stroke();
+    if (major) {
+      g.fillStyle = v >= 7200 ? COLORS.danger : COLORS.fg; g.font = `600 21px ${FONT_D}`;
+      g.fillText(String(v / 1000), cx + Math.cos(a) * (R - 36), cy + Math.sin(a) * (R - 36));
+    }
+  }
+  const a = ang(SIM.rpm);
+  g.strokeStyle = COLORS.danger; g.lineWidth = 4; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(cx - Math.cos(a) * 12, cy - Math.sin(a) * 12); g.lineTo(cx + Math.cos(a) * (R - 6), cy + Math.sin(a) * (R - 6)); g.stroke();
+  g.fillStyle = COLORS.fg; g.beginPath(); g.arc(cx, cy, 7, 0, Math.PI * 2); g.fill();
+  g.fillStyle = COLORS.muted; g.font = `500 15px ${FONT_M}`; g.fillText('×1000', cx, cy + R * 0.62);
+}
+// 图表横轴 q = 循环角 ψ - 360：左起进气、压缩，中间为点火上止点，右侧做功、排气
+const BANDS = [[0, 180, 'intake', '进气'], [180, 360, 'comp', '压缩'], [360, 540, 'power', '做功'], [540, 720, 'exhaust', '排气']];
+const Q2PSI = q => wrap720(q + 360);
+function drawPV() {
+  const c = $('pvChart'), g = c.getContext('2d'), W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H);
+  const L = 58, Rr = 52, T = 34, B = 50, pw = W - L - Rr, ph = H - T - B;
+  const X = p => L + p / 720 * pw;
+  const pMax = Math.max(40, Math.ceil((SIM.peak * 1.12) / 20) * 20);
+  const Yp = p => T + ph - clamp(p / pMax, 0, 1.02) * ph;
+  const Yl = l => T + ph - (l / 1.2) * ph;
+  g.textBaseline = 'middle';
+  for (const [a, b, k, name] of BANDS) {
+    g.globalAlpha = 0.1; g.fillStyle = COLORS[k]; g.fillRect(X(a), T, X(b) - X(a), ph); g.globalAlpha = 1;
+    g.fillStyle = COLORS[k]; g.font = `700 19px ${FONT_B}`; g.textAlign = 'center';
+    g.fillText(name, (X(a) + X(b)) / 2, T - 15);
+  }
+  g.strokeStyle = COLORS.line; g.lineWidth = 1; g.font = `500 15px ${FONT_M}`; g.fillStyle = COLORS.muted;
+  const step = pMax > 100 ? 40 : 20;
+  g.textAlign = 'right';
+  for (let p = 0; p <= pMax; p += step) { g.beginPath(); g.moveTo(L, Yp(p)); g.lineTo(L + pw, Yp(p)); g.stroke(); g.fillText(String(p), L - 8, Yp(p)); }
+  g.textAlign = 'left';
+  for (let mm = 0; mm <= 12; mm += 4) g.fillText(`${mm}`, L + pw + 8, Yl(mm / 10));
+  g.textAlign = 'center';
+  for (let p = 0; p <= 720; p += 90) {
+    g.beginPath(); g.moveTo(X(p), T); g.lineTo(X(p), T + ph); g.stroke();
+    g.fillStyle = COLORS.muted; g.fillText(`${p - 360}°`, X(p), T + ph + 15);
+    if (p % 180 === 0) { g.fillStyle = COLORS.fg; g.fillText(p === 360 ? '点火 TDC' : p % 360 === 0 ? '换气 TDC' : 'BDC', X(p), T + ph + 34); }
+  }
+  g.save(); g.translate(16, T + ph / 2); g.rotate(-Math.PI / 2); g.fillStyle = COLORS.muted; g.fillText('缸压 bar', 0, 0); g.restore();
+  g.save(); g.translate(W - 10, T + ph / 2); g.rotate(Math.PI / 2); g.fillStyle = COLORS.muted; g.fillText('升程 mm', 0, 0); g.restore();
+  // 活塞位置（上止点在上）
+  g.setLineDash([6, 6]); g.strokeStyle = COLORS.muted; g.lineWidth = 1.6; g.beginPath();
+  for (let p = 0; p <= 720; p += 4) { const y = T + ph * (0.04 + 0.92 * (vol(Q2PSI(p)) - GEO.Vc) / GEO.Vd); p ? g.lineTo(X(p), y) : g.moveTo(X(p), y); }
+  g.stroke(); g.setLineDash([]);
+  // 气门升程
+  for (const key of ['ex', 'in']) {
+    const col = key === 'in' ? COLORS.intake : COLORS.exhaust;
+    g.beginPath(); g.moveTo(X(0), Yl(0));
+    for (let p = 0; p <= 720; p += 2) g.lineTo(X(p), Yl(valveLiftAt(key, SIM.sel, camAngle(key, (FIRE[SIM.sel] + Q2PSI(p)) * DEG))));
+    g.lineTo(X(720), Yl(0)); g.closePath();
+    g.globalAlpha = 0.22; g.fillStyle = col; g.fill(); g.globalAlpha = 1;
+    g.strokeStyle = col; g.lineWidth = 2.2; g.stroke();
+  }
+  // 缸压
+  g.strokeStyle = COLORS.power; g.lineWidth = 3; g.beginPath();
+  for (let p = 0; p <= 720; p++) { const y = Yp(PRESS[Q2PSI(p)]); p ? g.lineTo(X(p), y) : g.moveTo(X(p), y); }
+  g.stroke();
+  // 当前位置
+  const cp = PSI[SIM.sel], q = wrap720(cp - 360), x = X(q), pv = PRESS[Math.floor(cp) % 720];
+  g.strokeStyle = COLORS.accent; g.lineWidth = 2; g.beginPath(); g.moveTo(x, T); g.lineTo(x, T + ph); g.stroke();
+  g.fillStyle = COLORS.accent; g.beginPath(); g.arc(x, Yp(pv), 7, 0, Math.PI * 2); g.fill();
+  const rel = Math.round(q - 360);
+  const txt = `${SIM.sel + 1} 缸 ${rel > 0 ? '+' : ''}${rel}° · ${pv.toFixed(pv < 10 ? 1 : 0)} bar`;
+  g.font = `600 16px ${FONT_M}`;
+  const tw = g.measureText(txt).width + 16, bx = L + 8;
+  g.fillStyle = COLORS.panel; g.globalAlpha = 0.92; g.fillRect(bx, T + 6, tw, 26); g.globalAlpha = 1;
+  g.strokeStyle = COLORS.accent; g.lineWidth = 1; g.strokeRect(bx + 0.5, T + 6.5, tw - 1, 25);
+  g.fillStyle = COLORS.fg; g.textAlign = 'left'; g.fillText(txt, bx + 8, T + 19);
+}
+function drawCurve() {
+  const c = $('curveChart'), g = c.getContext('2d'), W = c.width, H = c.height;
+  g.clearRect(0, 0, W, H);
+  const L = 58, Rr = 56, T = 24, B = 40, pw = W - L - Rr, ph = H - T - B, r0 = 500, r1 = 7500;
+  const X = r => L + (r - r0) / (r1 - r0) * pw, Yt = t => T + ph - t / 700 * ph, Yk = p => T + ph - p / 420 * ph;
+  g.globalAlpha = 0.12; g.fillStyle = COLORS.danger; g.fillRect(X(7200), T, X(r1) - X(7200), ph); g.globalAlpha = 1;
+  g.strokeStyle = COLORS.line; g.lineWidth = 1; g.font = `500 15px ${FONT_M}`; g.textBaseline = 'middle';
+  g.fillStyle = COLORS.muted; g.textAlign = 'right';
+  for (let t = 0; t <= 700; t += 100) { g.beginPath(); g.moveTo(L, Yt(t)); g.lineTo(L + pw, Yt(t)); g.stroke(); g.fillText(String(t), L - 8, Yt(t)); }
+  g.textAlign = 'left';
+  for (let p = 0; p <= 400; p += 100) g.fillText(String(p), L + pw + 8, Yk(p));
+  g.textAlign = 'center';
+  for (let r = 1000; r <= 7000; r += 1000) { g.beginPath(); g.moveTo(X(r), T); g.lineTo(X(r), T + ph); g.stroke(); g.fillText(String(r), X(r), T + ph + 16); }
+  const line = (fn, col, w) => { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); for (let r = 750; r <= 7200; r += 25) { const y = fn(r); r === 750 ? g.moveTo(X(r), y) : g.lineTo(X(r), y); } g.stroke(); };
+  line(r => Yt(interp(TQ, r)), COLORS.accent, 3);
+  line(r => Yk(interp(TQ, r) * r * 2 * Math.PI / 60000), COLORS.intake, 3);
+  g.font = `600 15px ${FONT_M}`; g.textAlign = 'left';
+  g.fillStyle = COLORS['accent-text']; g.fillText('650 N·m  2750–5500', X(2800), Yt(650) - 14);
+  g.fillStyle = COLORS.intake; g.fillText('375 kW @ 6250', X(4700), Yk(375) + 18);
+  const rn = SIM.rpm, tw = interp(TQ, rn);
+  g.setLineDash([5, 5]); g.strokeStyle = COLORS.fg; g.lineWidth = 1.5;
+  g.beginPath(); g.moveTo(X(rn), T); g.lineTo(X(rn), T + ph); g.stroke(); g.setLineDash([]);
+  const dot = (x, y, col, fill) => { g.beginPath(); g.arc(x, y, 6.5, 0, Math.PI * 2); if (fill) { g.fillStyle = col; g.fill(); } else { g.strokeStyle = col; g.lineWidth = 2.5; g.stroke(); } };
+  dot(X(rn), Yt(tw), COLORS.accent, true);
+  dot(X(rn), Yk(tw * rn * 2 * Math.PI / 60000), COLORS.intake, true);
+  dot(X(rn), Yt(Math.max(0, SIM.torque)), COLORS.fg, false);
+  g.fillStyle = COLORS.muted; g.font = `500 14px ${FONT_B}`; g.textAlign = 'left';
+  g.fillText('○ 当前负荷下的实际扭矩', L + 6, T + ph - 12);
+}
+
+/* ================= 主循环 ================= */
+let hudT = 1, pressT = 0, frameNo = 0, lastT = performance.now(), first = true;
+function hud(dt) {
+  for (let i = 0; i < 6; i++) {
+    const psi = PSI[i], ce = cylEls[i], [name, cls] = STROKES[Math.floor(psi / 180) % 4];
+    if (ce.cls !== cls) { if (ce.cls) ce.el.classList.remove(ce.cls); ce.el.classList.add(cls); ce.cls = cls; ce.s.textContent = name; }
+    ce.bar.style.width = `${((psi % 180) / 180 * 100).toFixed(1)}%`;
+    if (prevPsi[i] > 600 && psi < 120) flashV[i] = 1;
+    prevPsi[i] = psi;
+    flashV[i] = Math.max(0, flashV[i] - dt * 2.2);
+    ce.flash.style.opacity = flashV[i].toFixed(2);
+  }
+  hudT += dt; pressT += dt;
+  if (pressT > 0.15) { pressT = 0; computePressure(); }
+  if (hudT > 0.12) {
+    hudT = 0;
+    const set = (id, v, small) => { const el = $(id); el.firstChild.nodeValue = v; if (small !== undefined) el.lastChild.textContent = small; };
+    $('rpmBig').textContent = fmt(Math.round(SIM.rpm / 10) * 10).replace(/,/g, '');
+    $('rpmSub').textContent = `点火 ${fmt(SIM.rpm / 20)} Hz`;
+    set('d-torque', fmt(SIM.torque));
+    set('d-power', fmt(Math.max(0, SIM.power)), `kW · ${fmt(Math.max(0, SIM.power) * 1.36)} PS`);
+    set('d-boost', (SIM.boost >= 0 ? '+' : '') + fmt(SIM.boost, 2), SIM.boost >= 0 ? 'bar' : 'bar 真空');
+    set('d-turbo', fmt(Math.round(SIM.turbo / 100) * 100));
+    set('d-vin', fmt(SIM.vanIn, 1), '°CA 提前');
+    set('d-vex', fmt(SIM.vanEx, 1), '°CA 推迟');
+    set('d-ign', fmt(SIM.ign, 1));
+    set('d-peak', fmt(SIM.peak));
+    set('d-pspeed', fmt(2 * 0.09 * SIM.rpm / 60, 1));
+    set('d-wg', fmt(SIM.wg * 100));
+    $('angleVal').textContent = `${fmt(wrap720(SIM.theta))}° / 720°`;
+    $('camVal').textContent = `凸轮轴 ${fmt(wrap360(SIM.theta / 2))}°`;
+    $('simScaleVal').textContent = SIM.timeScale === 1 ? '实时 1:1' : `动画放慢 ${Math.round(1 / SIM.timeScale)}×`;
+  }
+  drawTach();
+  drawPV();
+  if (frameNo % 3 === 0) drawCurve();
+}
+function frame(now) {
+  const realDt = Math.max(0, (now - lastT) / 1000), dt = Math.min(0.05, realDt); lastT = now;
+  stepSim(dt);
+  if (SIM.playing) SIM.theta += SIM.rpm / 60 * 360 * dt * SIM.timeScale;
+  pose(SIM.theta);
+  updateFX(dt);
+  if (tween) {
+    tween.t = Math.min(1, tween.t + Math.min(0.3, realDt) / 0.9);
+    const t = tween.t, e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    camera.position.lerpVectors(tween.p0, tween.p1, e);
+    controls.target.lerpVectors(tween.t0, tween.t1, e);
+    if (tween.t >= 1) tween = null;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+  if (labelsOn) labelRenderer.render(scene, camera);
+  hud(dt);
+  updateAudio();
+  if (first) { first = false; $('loading').hidden = true; }
+  frameNo++;
+  requestAnimationFrame(frame);
+}
+resize();
+goView('iso', true);
+setTarget(2500);
+SIM.theta = 40;
+requestAnimationFrame(frame);
+</script>
+</html>
